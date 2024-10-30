@@ -25,6 +25,8 @@ int main(int argc, char *argv[])
     //     printf("\nPlease, choose an username that's not associated with another user.\n");
     // }
 
+    //Escrever coisas, porque coisas
+
     char choice[50];
     while (1)
     {
