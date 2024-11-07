@@ -1,25 +1,13 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <signal.h>
-#include <stdbool.h>
+#include "helper.h"
 
-#define MAX_USERS 10
-#define MAX_TOPICS 20
-#define MAX_TOPIC_NOME 20
-#define MAX_MSG_PERSIST 5
-
-bool checkIfExistsInArray(char *array[], char *str, int array_size);
+// bool checkIfExistsInArray(char *array[], char *str, int array_size);
 
 int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
 
-    // Usar estruturas dinamicas?
-
-    char users[MAX_USERS][100];
-    char topics[MAX_TOPICS][MAX_TOPIC_NOME];
+    user *users[MAX_USERS];
+    topic *topics[MAX_TOPIC_SIZE];
     int current_users = 0;
     int current_topics = 0;
 
@@ -49,7 +37,7 @@ int main(int argc, char *argv[])
 
     /* ========================== CHECK FOR MAX TOPICS AND DUPLICATE TOPICS ================================= */
     // Receive topic from user
-    if (current_topics >= MAX_TOPICS)
+    if (current_topics >= MAX_TOPIC_SIZE)
     {
         // Warns the user there's no room, that they should try later
         printf("\nMax topics active reached\n");
@@ -65,10 +53,10 @@ int main(int argc, char *argv[])
     exit(EXIT_SUCCESS);
 }
 
-bool checkIfExistsInArray(char *array[], char *str, int array_size)
-{
-    for (int i = 0; i < array_size; i++)
-        if (strcmp(array[i], str) == 0)
-            return true;
-    return false;
-}
+// bool checkIfExistsInArray(char *array[], char *str, int array_size)
+// {
+//     for (int i = 0; i < array_size; i++)
+//         if (strcmp(array[i], str) == 0)
+//             return true;
+//     return false;
+// }
