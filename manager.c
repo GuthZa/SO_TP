@@ -1,13 +1,14 @@
 #include "helper.h"
 
 // bool checkIfExistsInArray(char *array[], char *str, int array_size);
+#define MAX_PERSIST_MSG 5
 
 int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
 
-    user *users[MAX_USERS];
-    topic *topics[MAX_TOPIC_SIZE];
+    user *users[TOPIC_MAX_USERS];
+    dataMSG *topics[TOPIC_MAX_SIZE];
     int current_users = 0;
     int current_topics = 0;
 
@@ -19,7 +20,7 @@ int main(int argc, char *argv[])
 
     /* ========================== CHECK FOR MAX USERS AND DUPLICATE USERS ================================= */
     // Receive user from users
-    if (current_users >= MAX_USERS)
+    if (current_users >= TOPIC_MAX_USERS)
     {
         // Warns the user there's no room, that they should try later
         printf("\nMax users active reached\n");
@@ -37,7 +38,7 @@ int main(int argc, char *argv[])
 
     /* ========================== CHECK FOR MAX TOPICS AND DUPLICATE TOPICS ================================= */
     // Receive topic from user
-    if (current_topics >= MAX_TOPIC_SIZE)
+    if (current_topics >= TOPIC_MAX_SIZE)
     {
         // Warns the user there's no room, that they should try later
         printf("\nMax topics active reached\n");
