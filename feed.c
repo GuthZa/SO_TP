@@ -7,16 +7,16 @@
 int main(int argc, char *argv[])
 {
     char username[100];
-    // Remove o buffer em stdout, de modo a mostrar as mensagens assim que recebe
-    // E não agurdar para que o buffer esteja "cheio" com mensagens
+    // Removes the buffer in stdout, to show the messages as soon as the user receives them
+    // Instead of waiting to fill the buffer
     setbuf(stdout, NULL);
 
     printf("\n Hello user!\n\n\tPlease enter your username: ");
     scanf("%s", username);
 
-    // Envia nome para manager para analise se já existe
+    // Sends the username to the manager, which checks if it already exists
 
-    // if (/*existe*/)
+    // if (/*exists*/)
     // {
     //     printf("\nDo be welcome, what would you like to do?\nEnter h for help.\n");
     // }
@@ -24,8 +24,6 @@ int main(int argc, char *argv[])
     // {
     //     printf("\nPlease, choose an username that's not associated with another user.\n");
     // }
-
-    //Escrever coisas, porque coisas
 
     char choice[50];
     while (1)

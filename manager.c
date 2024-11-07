@@ -6,8 +6,8 @@
 #include <stdbool.h>
 
 #define MAX_USERS 10
-#define MAX_TOPICOS 20
-#define MAX_TOPICO_NOME 20
+#define MAX_TOPICS 20
+#define MAX_TOPIC_NOME 20
 #define MAX_MSG_PERSIST 5
 
 bool checkIfExistsInArray(char *array[], char *str, int array_size);
@@ -19,18 +19,18 @@ int main(int argc, char *argv[])
     // Usar estruturas dinamicas?
 
     char users[MAX_USERS][100];
-    char topicos[MAX_TOPICOS][MAX_TOPICO_NOME];
+    char topics[MAX_TOPICS][MAX_TOPIC_NOME];
     int current_users = 0;
-    int current_topicos = 0;
+    int current_topics = 0;
 
     // Vars for debugging ----------------------------------------------------------------------------------
     char new_user[] = "Wisura";
-    char new_topico[] = "futebol";
+    char new_topic[] = "futebol";
 
     // Vars for debugging ----------------------------------------------------------------------------------
 
     /* ========================== CHECK FOR MAX USERS AND DUPLICATE USERS ================================= */
-    // Recebe user de user
+    // Receive user from users
     if (current_users >= MAX_USERS)
     {
         // Warns the user there's no room, that they should try later
@@ -48,18 +48,18 @@ int main(int argc, char *argv[])
     }
 
     /* ========================== CHECK FOR MAX TOPICS AND DUPLICATE TOPICS ================================= */
-    // Recebe user de user
-    if (current_topicos >= MAX_TOPICOS)
+    // Receive topic from user
+    if (current_topics >= MAX_TOPICS)
     {
         // Warns the user there's no room, that they should try later
         printf("\nMax topics active reached\n");
     }
     else
     {
-        if (checkIfExistsInArray(topicos, new_topico, current_topicos))
+        if (checkIfExistsInArray(topics, new_topic, current_topics))
             printf("\nThat topic already exists.\n");
-        topicos[current_topicos++];
-        printf("\n New topic added, %s!\n", new_topico);
+        topics[current_topics++];
+        printf("\n New topic added, %s!\n", new_topic);
     }
 
     exit(EXIT_SUCCESS);
