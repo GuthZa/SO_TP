@@ -34,45 +34,9 @@ typedef struct
 
 typedef struct
 {
+    char topic[MAX_TOPIC_SIZE];
     int msg_size;
     char user[MAX_USER_SIZE];
-    int time; // Time until being deleted in seconds
-    char *msg;
-} dataMSG;
-
-typedef struct
-{
-    pid_t pid_user;
-    char topic[MAX_TOPIC_SIZE];
-    dataMSG msg;
-} message;
-
-typedef struct
-{
-    char topic[MAX_TOPIC_SIZE];
-    dataMSG msg;
-} response;
-
-typedef struct
-{
-    pid_t pid_user;
-    char user[MAX_USER_SIZE];
-    char topic[MAX_TOPIC_SIZE];
-} subscribe;
-
-typedef struct
-{
-    char name[MAX_TOPIC_SIZE];
-    dataMSG *persistant_messages[MAX_PERSIST_MSG];
-} topic;
-
-/*
-
-typedef struct
-{
-    char topic[TOPIC_MAX_SIZE];
-    int msg_size;
-    char user[USER_MAX_SIZE];
     int time; // Time until being deleted
     char *msg;
 } dataMSG;
@@ -86,8 +50,6 @@ typedef struct
 typedef struct
 {
     pid_t pid_user;
-    char user[USER_MAX_SIZE];
-    char topic[TOPIC_MAX_SIZE];
+    char user[MAX_USER_SIZE];
+    char topic[MAX_TOPIC_SIZE];
 } subscribe;
-
-*/
