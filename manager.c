@@ -16,6 +16,8 @@ int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
 
+    // Usar estruturas dinamicas?
+
     char users[MAX_USERS][100];
     char topicos[MAX_TOPICOS][MAX_TOPICO_NOME];
     int current_users = 0;
@@ -66,7 +68,7 @@ int main(int argc, char *argv[])
 bool checkIfExistsInArray(char *array[], char *str, int array_size)
 {
     for (int i = 0; i < array_size; i++)
-        if (strcmp(array[i], str))
-            return false;
-    return true;
+        if (strcmp(array[i], str) == 0)
+            return true;
+    return false;
 }
