@@ -21,8 +21,8 @@
 // Max size of the user name
 #define USER_MAX_SIZE 100
 
-// Max users per topic
-#define TOPIC_MAX_USERS 10
+// Max users 
+#define MAX_USERS 10
 
 typedef struct user
 {
