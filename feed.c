@@ -4,6 +4,16 @@
 // 5 words for a command on this program
 #define MAX_ARGS 5
 
+// I'm too lazy to remove the files manually
+void handler_sigalrm(int s, siginfo_t *i, void *v)
+{
+    kill(getpid(), SIGINT);
+
+    unlink(FEED_PIPE_FINAL);
+    printf("\nadeus\n");
+    exit(1);
+}
+
 int main()
 {
     char message[MSG_MAX_SIZE];
@@ -12,6 +22,16 @@ int main()
     // Removes the buffer in stdout, to show the messages as soon as the user receives them
     // Instead of waiting to fill the buffer
     setbuf(stdout, NULL);
+
+    /* ================ SIGNAL TO REMOVE PIPE =================== */
+    struct sigaction sa;
+    sa.sa_sigaction = handler_sigalrm;
+    sa.sa_flags = SA_RESTART | SA_SIGINFO;
+    sigaction(SIGINT, &sa, NULL);
+
+    /* ================== SETUP THE PIPES ======================= */
+    sprintf(FEED_PIPE_FINAL, FEED_PIPE, getpid());
+    mkfifo(FEED_PIPE_FINAL, 0660);
 
     /* =================== HANDLES USERNAME ===================== */
     user usr;
