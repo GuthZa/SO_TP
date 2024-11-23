@@ -27,53 +27,45 @@ int main(int argc, char *argv[])
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
 
-    // Checks if the server is already running
-    if (access(MANAGER_PIPE, F_OK) == 0)
-    {
-        printf("[Error] Pipe is already open.\n");
-        return 1;
-    }
-
     /* ================== SETUP THE PIPES ======================= */
-    int fd_send, fd_server, size;
-    sprintf(FEED_PIPE_FINAL, FEED_PIPE, getpid());
-    if (mkfifo(MANAGER_PIPE, 0660) == -1)
-    {
-        if (errno == EEXIST)
-            printf("[Warning] Named pipe already exists or the program is open.\n");
-        printf("[Error] Unable to open the named pipe.\n");
-        return 1;
-    }
+    int fd_send, fd_manager, size;
+    checkPipeAvailability(MANAGER_PIPE);
 
-    if ((fd_server = open(MANAGER_PIPE, O_RDONLY)) == -1)
+    if ((fd_manager = open(MANAGER_PIPE, O_RDONLY)) == -1)
     {
         printf("[Error] Unable to open the server pipe for reading.\n");
-        return 1;
+        exit(1);
     }
 
     /* ====================== SERVICE START ======================== */
     do
     {
         /* ================== ACCEPTS USERS LOGINS ================= */
-        size = read(fd_server, &type, sizeof(msgType));
+        size = read(fd_manager, &type, sizeof(msgType));
         if (size < 0)
         {
             printf("[Error] Unable to read from the server pipe.\n");
-            close(fd_server);
+            union sigval val;
+            val.sival_int = -1;
+            // Sends a signal to all users that service has ended
+            for (int i = 0; i < current_users; i++)
+            {
+                sigqueue(user_list[i].pid, SIGUSR2, val);
+            }
+            close(fd_manager);
             closeService(MANAGER_PIPE);
         }
         if (size == 0)
         {
-            //? Maybe send a signal to the user?
             printf("[Warning] Nothing was read from the pipe.\n");
-            return 1;
+            continue;
         }
 
         // Receive information from the user
         switch (type)
         {
         case LOGIN:
-            userData user = acceptUsers(fd_server, user_list, current_users);
+            userData user = acceptUsers(fd_manager, user_list, current_users);
             //! Keep in mind: should be a shallow copy
             if (user.pid != -1)
                 user_list[current_users++] = user;
@@ -142,7 +134,7 @@ userData acceptUsers(int fd, userData *user_list, int current_users)
         printf("[Error] Unable to read from the server pipe.\n");
         close(fd);
         closeService(MANAGER_PIPE);
-        exit(2);
+        exit(1);
     }
     if (size == 0)
     {
@@ -153,7 +145,7 @@ userData acceptUsers(int fd, userData *user_list, int current_users)
 
     for (int i = 0; i < current_users; i++)
     {
-        if (user_list[i].name == user.pid)
+        if (user_list[i].pid == user.pid)
         {
             sprintf(resp, "<SERV> There's already a user using the username {%s}, please choose another.\n", user.name);
             sendMessage(fd_clnt, resp, "");
