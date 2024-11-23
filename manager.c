@@ -9,8 +9,6 @@ typedef struct
 
 userData acceptUsers(int fd, userData *user_list, int current_users);
 
-const char *receiveMessage(int fd);
-
 void sendMessage(int fd, char *msg, char *topic);
 
 int main(int argc, char *argv[])
@@ -22,12 +20,6 @@ int main(int argc, char *argv[])
     topic topic_list[TOPIC_MAX_SIZE];
     int current_users = 0;
     int current_topics = 0;
-
-    // Vars for debugging ----------------------------------------------------------------------------------
-    char new_user[] = "Wisura";
-    char new_topic[] = "futebol";
-
-    // Vars for debugging ----------------------------------------------------------------------------------
 
     // Signal to remove the pipe
     struct sigaction sa;
@@ -191,24 +183,4 @@ void sendMessage(int fd, char *msg, char *topic)
     close(fd);
 
     return;
-}
-
-const char *receiveMessage(int fd)
-{
-    msgType type;
-    int size = read(fd, &type, sizeof(msgType));
-    if (size < 0)
-    {
-        printf("[Error] Unable to read from the server pipe.\n");
-        close(fd);
-        unlink(MANAGER_PIPE);
-        exit(2);
-    }
-    if (size == 0)
-    {
-        //? Maybe send a signal to the user?
-        printf("[Warning] Nothing was read from the pipe.\n");
-        return "a";
-    }
-    return "b";
 }
