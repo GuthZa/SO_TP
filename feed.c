@@ -4,16 +4,6 @@
 // 5 words for a command on this program
 #define MAX_ARGS 5
 
-// I'm too lazy to remove the files manually
-void handler_sigalrm(int s, siginfo_t *i, void *v)
-{
-    kill(getpid(), SIGINT);
-
-    unlink(FEED_PIPE_FINAL);
-    printf("\nadeus\n");
-    exit(1);
-}
-
 int main()
 {
     char message[MSG_MAX_SIZE];
@@ -25,7 +15,7 @@ int main()
 
     /* ================ SIGNAL TO REMOVE PIPE =================== */
     struct sigaction sa;
-    sa.sa_sigaction = handler_sigalrm;
+    sa.sa_sigaction = handler_closeService;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
 
@@ -34,7 +24,7 @@ int main()
     mkfifo(FEED_PIPE_FINAL, 0660);
 
     /* =================== HANDLES USERNAME ===================== */
-    user usr;
+    userData user;
 
     printf("\nHello user!\n\nPlease enter your username: ");
     read(STDIN_FILENO, message, USER_MAX_SIZE);
@@ -45,12 +35,12 @@ int main()
         exit(1);
     }
 
-    strcpy(usr.name, message);
-    usr.pid = getpid();
+    strcpy(user.name, message);
+    user.pid = getpid();
 
     do
     {
-        printf("\n%s $ ", usr.name);
+        printf("\n%s $ ", user.name);
         read(STDIN_FILENO, message, MSG_MAX_SIZE);
 
         // Divides the input of the user in multiple strings
@@ -67,7 +57,7 @@ int main()
         /* =============== CHECK COMMAND VALIDITY =================== */
         if (strcmp(argv[0], "exit") == 0)
         {
-            printf("\n Goodbye %s\n", usr.name);
+            printf("\n Goodbye %s\n", user.name);
             exit(1);
         }
 
@@ -118,7 +108,7 @@ int main()
         return 1;
     }
 
-    if (write(fd_manager, &usr, sizeof(usr)) == -1)
+    if (write(fd_manager, &user, sizeof(user)) == -1)
     {
         printf("erro");
         return 2;
@@ -172,4 +162,11 @@ int main()
     // }
 
     exit(EXIT_SUCCESS);
+}
+
+void handler_closeService(int s, siginfo_t *i, void *v)
+{
+    printf("Please type exit\n");
+    // kill(getpid(), SIGINT);
+    closeService(FEED_PIPE_FINAL);
 }
