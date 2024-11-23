@@ -7,9 +7,11 @@ typedef struct
     pid_t users[MAX_USERS];
 } topic;
 
-userData acceptUsers(int fd);
+userData acceptUsers(int fd, userData *user_list, int current_users);
 
 const char *receiveMessage(int fd);
+
+void sendMessage(int fd, char *msg, char *topic);
 
 int main(int argc, char *argv[])
 {
@@ -79,13 +81,10 @@ int main(int argc, char *argv[])
         switch (type)
         {
         case LOGIN:
-            if (current_users >= MAX_USERS)
-            {
-                //! Keep in mind: should be a shallow copy
-                userData user = acceptUsers(fd_server);
-                if (user.pid != -1)
-                    user_list[current_users++] = user;
-            }
+            userData user = acceptUsers(fd_server, user_list, current_users);
+            //! Keep in mind: should be a shallow copy
+            if (user.pid != -1)
+                user_list[current_users++] = user;
             break;
         case SUBSCRIBE:
             break;
@@ -97,22 +96,6 @@ int main(int argc, char *argv[])
             // Only reaches here if there's changes to the user code
             break;
         }
-
-        // if (current_users >= MAX_USERS)
-        // {
-        // }
-        // else
-        // {
-        //     for (int i = 0; i < MAX_USERS; i++)
-        //         if (strcmp(user_list[i]->name, str) == 0)
-        //         {
-        //             // Sends an answer back to FEED that there's already a user logged in
-        //             printf("\nDuplicated user.\n");
-        //             break;
-        //         }
-        //     user_list[current_users++];
-        //     printf("\n New user logged in, welcome %s!\n", new_user);
-        // }
 
         // /* ======== CHECK FOR MAX TOPICS AND DUPLICATE TOPICS ======= */
         // // Receive topic from user
@@ -145,9 +128,22 @@ void handler_closeService(int s, siginfo_t *i, void *v)
     closeService(MANAGER_PIPE);
 }
 
-userData acceptUsers(int fd)
+userData acceptUsers(int fd, userData *user_list, int current_users)
 {
     userData user;
+    char *resp;
+    // Setup a message to the client
+    sprintf(FEED_PIPE_FINAL, FEED_PIPE, user.pid);
+    int fd_clnt = open(FEED_PIPE_FINAL, O_WRONLY);
+
+    if (current_users >= MAX_USERS)
+    {
+        resp = "<SERV> We have reached the maximum users available. Sorry, please try again later.\n";
+        sendMessage(fd_clnt, resp, "");
+        user.pid = -1;
+        return user;
+    }
+
     int size = read(fd, &user, sizeof(userData));
     if (size < 0)
     {
@@ -158,30 +154,43 @@ userData acceptUsers(int fd)
     }
     if (size == 0)
     {
-        //? Maybe send a signal to the user?
         printf("[Warning] Nothing was read from the pipe.\n");
         user.pid = -1;
+        return user;
     }
 
-    // Setup a message to the client
-    sprintf(FEED_PIPE_FINAL, FEED_PIPE, user.pid);
-    int fd_clnt = open(FEED_PIPE_FINAL, O_WRONLY);
+    for (int i = 0; i < current_users; i++)
+    {
+        if (user_list[i].name == user.pid)
+        {
+            sprintf(resp, "<SERV> There's already a user using the username {%s}, please choose another.\n", user.name);
+            sendMessage(fd_clnt, resp, "");
+            user.pid = -1;
+            return user;
+        }
+    }
 
-    char *resp_msg = "We have reached the maximum users available. Sorry, please try again later.\n";
+    sprintf(resp, "<SERV> Welcome {%s}!\n", user.name);
+    sendMessage(fd_clnt, resp, "");
+
+    return user;
+}
+
+void sendMessage(int fd, char *msg, char *topic)
+{
     response resp;
-    strcpy(resp.topic, ""); // No topic, it's a warning message
+    char *resp_msg;
+    strcpy(resp.topic, topic); // No topic, it's a warning message
     strcpy(resp.msg, resp_msg);
     resp.msg_size = strlen(resp_msg);
 
     // If there's an error sending OK to login, we discard the login attempt
-    if (write(fd_clnt, (char *)&resp, sizeof(response)) <= 0)
-    {
+    if (write(fd, (char *)&resp, sizeof(response)) <= 0)
         printf("[Warning] Unable to respond to the client.\n");
-        user.pid = -1;
-    }
-    close(fd_clnt);
 
-    return user;
+    close(fd);
+
+    return;
 }
 
 const char *receiveMessage(int fd)
