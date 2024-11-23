@@ -7,9 +7,14 @@ typedef struct
     pid_t users[MAX_USERS];
 } topic;
 
+// These are global so I can manipulate them from a signal
+// Only for logouts
+
 userData acceptUsers(int fd, userData *user_list, int current_users);
 
-void sendMessage(int fd, char *msg, char *topic);
+void sendMessage(int fd, response resp);
+
+void logoutUser(userData *user_list, int current_users, int pid);
 
 int main(int argc, char *argv[])
 {
@@ -23,7 +28,7 @@ int main(int argc, char *argv[])
 
     // Signal to remove the pipe
     struct sigaction sa;
-    sa.sa_sigaction = handler_closeService;
+    sa.sa_sigaction = handle_closeService;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
 
@@ -55,11 +60,6 @@ int main(int argc, char *argv[])
             close(fd_manager);
             closeService(MANAGER_PIPE);
         }
-        if (size == 0)
-        {
-            printf("[Warning] Nothing was read from the pipe.\n");
-            continue;
-        }
 
         // Receive information from the user
         switch (type)
@@ -70,16 +70,17 @@ int main(int argc, char *argv[])
             if (user.pid != -1)
                 user_list[current_users++] = user;
             break;
+        case LOGOUT:
+            logoutUser(user_list, current_users, user.pid);
+            break;
         case SUBSCRIBE:
             break;
         case MESSAGE:
             break;
         case LIST:
             break;
-        default:
-            // Only reaches here if there's changes to the user code
-            break;
         }
+        type = -1;
 
         // /* ======== CHECK FOR MAX TOPICS AND DUPLICATE TOPICS ======= */
         // // Receive topic from user
@@ -105,7 +106,7 @@ int main(int argc, char *argv[])
     exit(EXIT_SUCCESS);
 }
 
-void handler_closeService(int s, siginfo_t *i, void *v)
+void handle_closeService(int s, siginfo_t *i, void *v)
 {
     printf("Please type exit\n");
     // kill(getpid(), SIGINT);
@@ -115,18 +116,7 @@ void handler_closeService(int s, siginfo_t *i, void *v)
 userData acceptUsers(int fd, userData *user_list, int current_users)
 {
     userData user;
-    char *resp;
-    // Setup a message to the client
-    sprintf(FEED_PIPE_FINAL, FEED_PIPE, user.pid);
-    int fd_clnt = open(FEED_PIPE_FINAL, O_WRONLY);
-
-    if (current_users >= MAX_USERS)
-    {
-        resp = "<SERV> We have reached the maximum users available. Sorry, please try again later.\n";
-        sendMessage(fd_clnt, resp, "");
-        user.pid = -1;
-        return user;
-    }
+    response resp;
 
     int size = read(fd, &user, sizeof(userData));
     if (size < 0)
@@ -143,30 +133,50 @@ userData acceptUsers(int fd, userData *user_list, int current_users)
         return user;
     }
 
+    // Setup a message to the client
+    sprintf(FEED_PIPE_FINAL, FEED_PIPE, user.pid);
+    int fd_clnt = open(FEED_PIPE_FINAL, O_WRONLY);
+
+    if (current_users >= MAX_USERS)
+    {
+        strcpy(resp.msg, "<SERV> We have reached the maximum users available. Sorry, please try again later.\n");
+        strcpy(resp.topic, "WARNING");
+        sendMessage(fd_clnt, resp);
+        user.pid = -1;
+        return user;
+    }
+
     for (int i = 0; i < current_users; i++)
     {
-        if (user_list[i].pid == user.pid)
+        if (strcmp(user_list[i].name, user.name) == 0)
         {
-            sprintf(resp, "<SERV> There's already a user using the username {%s}, please choose another.\n", user.name);
-            sendMessage(fd_clnt, resp, "");
+            sprintf(resp.msg, "<SERV> There's already a user using the username {%s}, please choose another.\n", user.name);
+            strcpy(resp.topic, "WARNING");
             user.pid = -1;
+            sendMessage(fd_clnt, resp);
             return user;
         }
     }
 
-    sprintf(resp, "<SERV> Welcome {%s}!\n", user.name);
-    sendMessage(fd_clnt, resp, "");
+    sprintf(resp.msg, "<SERV> Welcome {%s}!\n", user.name);
+    strcpy(resp.topic, "WELCOME");
+    sendMessage(fd_clnt, resp);
 
+    //! TO REMOVE, will clutter the manager screen
+    // Is only for the information while developing
+    printf("[INFO] New user {%s} logged in\n", user.name);
     return user;
 }
 
-void sendMessage(int fd, char *msg, char *topic)
+/**
+ * @param fd file descritor to send the message
+ * @param resp struct with msg and topic
+ *
+ * @note There is no need to initialize "msg_size"
+ */
+void sendMessage(int fd, response resp)
 {
-    response resp;
-    char *resp_msg;
-    strcpy(resp.topic, topic); // No topic, it's a warning message
-    strcpy(resp.msg, resp_msg);
-    resp.msg_size = strlen(resp_msg);
+    resp.msg_size = strlen(resp.msg);
 
     // If there's an error sending OK to login, we discard the login attempt
     if (write(fd, (char *)&resp, sizeof(response)) <= 0)
@@ -174,5 +184,27 @@ void sendMessage(int fd, char *msg, char *topic)
 
     close(fd);
 
+    return;
+}
+
+void logoutUser(userData *user_list, int current_users, int pid)
+{
+    int isLoggedIn = 0;
+    for (int j = 0; j < current_users; j++)
+    {
+        if (user_list[j].pid == pid)
+        {
+            if (j < current_users - 1)
+                user_list[j] = user_list[j++];
+            if (j == current_users - 1)
+                memset(&user_list[j], 0, sizeof(userData));
+        }
+    }
+    current_users--;
+
+    for (int j = 0; j < current_users; j++)
+    {
+        printf("User logged in: %s\n", user_list[j]);
+    }
     return;
 }

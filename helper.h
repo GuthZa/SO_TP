@@ -28,12 +28,17 @@ char FEED_PIPE_FINAL[100];
 typedef enum
 {
     LOGIN,
+    LOGOUT,
     SUBSCRIBE,
     MESSAGE,
     RESPONSE,
     LIST,
 } msgType;
 
+/**
+ * @param pid pid_t
+ * @param name string
+ */
 typedef struct
 {
     pid_t pid;
@@ -43,7 +48,23 @@ typedef struct
     // char topics[TOPIC_MAX_SIZE];
 } userData;
 
-// To use by the manager, to send messages to the user
+/** Wrappper of userData to login
+ * @param type enum with message type
+ * @param user userData
+ */
+typedef struct
+{
+    msgType type;
+    userData user;
+} login;
+
+/**
+ * @param topic string
+ * @param msg_size int
+ * @param msg string
+ *
+ * @note To send messages Manager -> User
+ */
 typedef struct
 {
     char topic[TOPIC_MAX_SIZE];
@@ -51,9 +72,19 @@ typedef struct
     char msg[MSG_MAX_SIZE];
 } response;
 
-// Action by the user to send messages
+/**
+ * @param type enum with message type
+ * @param topic string
+ * @param user userData
+ * @param time int in seconds
+ * @param msg_size int
+ * @param msg string
+ *
+ * @note To send messages User -> Manager
+ */
 typedef struct
 {
+    msgType type;
     char topic[TOPIC_MAX_SIZE];
     userData user;
     int time; // Time until being deleted
@@ -61,13 +92,25 @@ typedef struct
     char msg[MSG_MAX_SIZE];
 } message;
 
-// Ping by user to subscribe to topic
+/**
+ * @param type enum with message type
+ * @param user userData
+ * @param topic string
+ *
+ * @note Ping by user to subscribe to topic
+ */
 typedef struct
 {
+    msgType type;
     userData user;
     char topic[TOPIC_MAX_SIZE];
 } subscribe;
 
+/**
+ * @param pipe Pointer to the name of the pipe
+ *
+ * @note Terminates the program
+ */
 void closeService(char *pipe)
 {
     unlink(pipe);
@@ -75,6 +118,11 @@ void closeService(char *pipe)
     exit(0);
 }
 
+/**
+ * @param pipe Pointer to the name of the pipe
+ *
+ * @note Might terminate the program
+ */
 void checkPipeAvailability(char *pipe)
 {
     // Checks if the server is already running
@@ -92,5 +140,7 @@ void checkPipeAvailability(char *pipe)
     }
 }
 
-// I'm too lazy to remove the files manually
-void handler_closeService(int s, siginfo_t *i, void *v);
+/**
+ * @note Is called when pressed Ctrl + C
+ */
+void handle_closeService(int s, siginfo_t *i, void *v);

@@ -4,11 +4,18 @@
 // 5 words for a command on this program
 #define MAX_ARGS 5
 
+int logUser(int fd_manager, login login_form);
+
 int main()
 {
     // Removes the buffer in stdout, to show the messages as soon as the user receives them
     // Instead of waiting to fill the buffer
     setbuf(stdout, NULL);
+
+    userData user;
+    msgType type;
+    login login_form;
+    int fd_manager, fd_feed, size;
 
     char message[MSG_MAX_SIZE];
     char *argv[MAX_ARGS] = {0};
@@ -16,14 +23,17 @@ int main()
 
     // Signal to remove the pipe
     struct sigaction sa;
-    sa.sa_sigaction = handler_closeService;
+    sa.sa_sigaction = handle_closeService;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
 
-    int fd_manager, fd_feed, size;
-    /* =================== HANDLES LOGIN ===================== */
-    userData user;
+    if ((fd_manager = open(MANAGER_PIPE, O_WRONLY)) == -1)
+    {
+        printf("[Error] Unable to open the server pipe for reading.\n");
+        exit(1);
+    }
 
+    /* =================== HANDLES LOGIN ===================== */
     printf("\nHello user!\n\nPlease enter your username: ");
     read(STDIN_FILENO, message, USER_MAX_SIZE);
     REMOVE_TRAILING_ENTER(message);
@@ -40,23 +50,13 @@ int main()
 
     /* ================== SETUP THE PIPES ======================= */
 
-    // Checks if the server is already running
-
+    // Checks there's a pipe with the same pid
     sprintf(FEED_PIPE_FINAL, FEED_PIPE, getpid());
     checkPipeAvailability(FEED_PIPE_FINAL);
 
-    if ((fd_manager = open(MANAGER_PIPE, O_WRONLY)) == -1)
-    {
-        printf("[Error] Unable to open the server pipe for reading.\n");
-        exit(1);
-    }
-
-    if (write(fd_manager, &user, sizeof(userData)))
-    {
-        printf("[Error] Unable to send message.\n");
-        close(fd_manager);
-        exit(1);
-    }
+    login_form.type = LOGIN;
+    login_form.user = user;
+    fd_feed = logUser(fd_manager, login_form);
 
     do
     {
@@ -78,7 +78,11 @@ int main()
         /* =============== CHECK COMMAND VALIDITY =================== */
         if (strcmp(argv[0], "exit") == 0)
         {
-            printf("\n Goodbye %s\n", user.name);
+            login_form.type = LOGOUT;
+            login_form.user = user;
+            if (write(fd_manager, &login_form, sizeof(login)) == -1)
+                printf("[Warning] Unable to respond to the client.\n");
+
             close(fd_manager);
             closeService(FEED_PIPE_FINAL);
             exit(0);
@@ -105,59 +109,51 @@ int main()
         }
 
     } while (1);
-
-    // if (/*exists*/)
-    // {
-    //     printf("\nDo be welcome, what would you like to do?\nEnter h for help.\n");
-    // }
-    // else
-    // {
-    //     printf("\nPlease, choose an username that's not associated with another user.\n");
-    // }
-
-    // do
-    // {
-    //     printf("\n%s $ ", usr.name);
-    //     read(stdin, &message, sizeof(message));
-    //     if (strcmp(message[0], "exit") == 0)
-    //     {
-    //         printf("Goodbye\n");
-    //         exit(EXIT_SUCCESS);
-    //     }
-
-    //     printf("O que pretende enviar: ");
-    //     fgets(envio, sizeof(envio), stdin);
-    //     if (write(fd, &envio, strlen(envio)) == -1)
-    //     {
-    //         printf("erro");
-    //         return 2;
-    //     }
-    //     if (strcmp(envio, "sair\n") == 0)
-    //     {
-    //         close(fd);
-    //         exit(1);
-    //     }
-    //     close(fd);
-    // } while (1);
-
-    // char choice[50];
-    // while (1)
-    // {
-    //     printf("\n%s $ ", message);
-    //     scanf("%s", choice);
-    //     if (strcmp(choice, "exit") == 0)
-    //     {
-    //         printf("Goodbye\n");
-    //         exit(EXIT_SUCCESS);
-    //     }
-    // }
-
     exit(EXIT_SUCCESS);
 }
 
-void handler_closeService(int s, siginfo_t *i, void *v)
+/**
+ * @param fd_manager int
+ * @param user userData
+ *
+ * @note Sends a login message and handles it
+ */
+int logUser(int fd_manager, login login_form)
+{
+    int fd_feed;
+    response resp;
+
+    if (write(fd_manager, &login_form, sizeof(login)) == -1)
+    {
+        printf("[Error] Unable to send message.\n");
+        close(fd_manager);
+        exit(1);
+    }
+
+    if ((fd_feed = open(FEED_PIPE_FINAL, O_RDONLY)) == -1)
+    {
+        printf("[Error] Unable to open the server pipe for reading.\n");
+        exit(1);
+    }
+
+    if (read(fd_feed, &resp, sizeof(response)) <= 0)
+    {
+        printf("[Error] Unable to read from the server pipe.\n");
+        close(fd_feed);
+        closeService(FEED_PIPE_FINAL);
+        exit(1);
+    }
+
+    printf("%s", resp.msg);
+    if (strcmp(resp.topic, "WARNING") == 0)
+        closeService(FEED_PIPE_FINAL);
+
+    return fd_feed;
+}
+
+void handle_closeService(int s, siginfo_t *i, void *v)
 {
     printf("Please type exit\n");
     // kill(getpid(), SIGINT);
-    closeService(FEED_PIPE_FINAL);
+    // closeService(FEED_PIPE_FINAL);
 }
