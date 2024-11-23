@@ -6,28 +6,27 @@
 
 int main()
 {
-    char message[MSG_MAX_SIZE];
-    char *argv[MAX_ARGS] = {0};
-    int argc = 0;
     // Removes the buffer in stdout, to show the messages as soon as the user receives them
     // Instead of waiting to fill the buffer
     setbuf(stdout, NULL);
 
-    /* ================ SIGNAL TO REMOVE PIPE =================== */
+    char message[MSG_MAX_SIZE];
+    char *argv[MAX_ARGS] = {0};
+    int argc = 0;
+
+    // Signal to remove the pipe
     struct sigaction sa;
     sa.sa_sigaction = handler_closeService;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
 
-    /* ================== SETUP THE PIPES ======================= */
-    sprintf(FEED_PIPE_FINAL, FEED_PIPE, getpid());
-    mkfifo(FEED_PIPE_FINAL, 0660);
-
-    /* =================== HANDLES USERNAME ===================== */
+    int fd_manager, fd_feed, size;
+    /* =================== HANDLES LOGIN ===================== */
     userData user;
 
     printf("\nHello user!\n\nPlease enter your username: ");
     read(STDIN_FILENO, message, USER_MAX_SIZE);
+    REMOVE_TRAILING_ENTER(message);
 
     if (strcmp(message, "exit") == 0)
     {
@@ -35,14 +34,36 @@ int main()
         exit(1);
     }
 
+    // Fill data from user
     strcpy(user.name, message);
     user.pid = getpid();
 
+    /* ================== SETUP THE PIPES ======================= */
+
+    // Checks if the server is already running
+
+    sprintf(FEED_PIPE_FINAL, FEED_PIPE, getpid());
+    checkPipeAvailability(FEED_PIPE_FINAL);
+
+    if ((fd_manager = open(MANAGER_PIPE, O_WRONLY)) == -1)
+    {
+        printf("[Error] Unable to open the server pipe for reading.\n");
+        exit(1);
+    }
+
+    if (write(fd_manager, &user, sizeof(userData)))
+    {
+        printf("[Error] Unable to send message.\n");
+        close(fd_manager);
+        exit(1);
+    }
+
     do
     {
-        printf("\n%s $ ", user.name);
+        printf("\n%s # ", user.name);
         read(STDIN_FILENO, message, MSG_MAX_SIZE);
 
+        REMOVE_TRAILING_ENTER(message);
         // Divides the input of the user in multiple strings
         // Similar to the way argv is handled
         for (char *token = strtok(message, " ");
@@ -58,7 +79,9 @@ int main()
         if (strcmp(argv[0], "exit") == 0)
         {
             printf("\n Goodbye %s\n", user.name);
-            exit(1);
+            close(fd_manager);
+            closeService(FEED_PIPE_FINAL);
+            exit(0);
         }
 
         if (strcmp(argv[0], "msg") != 0)
@@ -82,38 +105,6 @@ int main()
         }
 
     } while (1);
-
-    /* ============= OPEN PIPES FOR COMMUNICATION ================ */
-    int fd_feed = open(FEED_PIPE, O_RDONLY);
-    if (fd_feed == -1)
-    {
-        printf("Erro ao abrir pipes ");
-        return 1;
-    }
-
-    /* =============== OPEN PIPE TO RECEIVE MESSAGES ============== */
-    int fd_manager = open(FEED_PIPE, O_WRONLY);
-    if (fd_manager == -1)
-    {
-        printf("Erro ao abrir pipes ");
-        return 1;
-    }
-
-    // Creates the "file" pipe to receive messages
-    if (mkfifo(FEED_PIPE, 0666) == -1)
-    {
-        if (errno == EEXIST)
-            printf("fifo já existe ou programa está em execução");
-        printf("Erro ao abrir fifo");
-        return 1;
-    }
-
-    if (write(fd_manager, &user, sizeof(user)) == -1)
-    {
-        printf("erro");
-        return 2;
-    }
-    close(fd_feed);
 
     // if (/*exists*/)
     // {

@@ -22,6 +22,8 @@
 
 char FEED_PIPE_FINAL[100];
 
+#define REMOVE_TRAILING_ENTER(str) str[strcspn(str, "\n")] = '\0'
+
 // Used to wrap each message
 typedef enum
 {
@@ -70,7 +72,24 @@ void closeService(char *pipe)
 {
     unlink(pipe);
     printf("\nGoodbye\n");
-    exit(1);
+    exit(0);
+}
+
+void checkPipeAvailability(char *pipe)
+{
+    // Checks if the server is already running
+    if (access(pipe, F_OK) == 0)
+    {
+        printf("[Error] Pipe is already open.\n");
+        exit(1);
+    }
+    if (mkfifo(pipe, 0660) == -1)
+    {
+        if (errno == EEXIST)
+            printf("[Warning] Named pipe already exists or the program is open.\n");
+        printf("[Error] Unable to open the named pipe.\n");
+        exit(1);
+    }
 }
 
 // I'm too lazy to remove the files manually
