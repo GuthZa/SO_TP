@@ -159,11 +159,22 @@ response sendMessage(msgStruct msg_struct)
                      FEED_FIFO_FINAL,
                      fd_manager, fd_feed);
 
-    if (read(fd_feed, &resp, sizeof(response)) <= 0)
+    if (read(fd_feed, &resp.msg_size, sizeof(int)) <= 0)
         closeService("[Error] Unable to read from the server pipe.\n",
                      FEED_FIFO_FINAL,
                      fd_manager, fd_feed);
 
+    if (read(fd_feed, &resp.topic, sizeof(resp.topic)) <= 0)
+        closeService("[Error] Unable to read from the server pipe.\n",
+                     FEED_FIFO_FINAL,
+                     fd_manager, fd_feed);
+
+    if (read(fd_feed, &resp.text, resp.msg_size) <= 0)
+        closeService("[Error] Unable to read from the server pipe.\n",
+                     FEED_FIFO_FINAL,
+                     fd_manager, fd_feed);
+
+    resp.text[resp.msg_size] = '\0';
     printf("%s", resp.text);
     if (strcmp(resp.topic, "WARNING") == 0)
         closeService(
@@ -178,5 +189,5 @@ void handle_closeService(int s, siginfo_t *i, void *v)
 {
     printf("Please type exit\n");
     // kill(getpid(), SIGINT);
-    // closeService(FEED_PIPE_FINAL);
+    closeService(".", FEED_FIFO_FINAL, 0, 1);
 }

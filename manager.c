@@ -178,7 +178,9 @@ userData acceptUsers(int fd, userData *user_list, int current_users)
         }
     }
 
-    sprintf(resp.text, "<SERV> Welcome {%s}!\n", user.name);
+    //* malloc size of text in each message?
+
+    resp.msg_size = sprintf(resp.text, "<SERV> Welcome {%s}!\n", user.name);
     strcpy(resp.topic, "WELCOME");
     sendMessage(resp);
 
@@ -196,10 +198,10 @@ userData acceptUsers(int fd, userData *user_list, int current_users)
 void sendMessage(response resp)
 {
     int fd = open(FEED_FIFO_FINAL, O_WRONLY);
-    resp.msg_size = strlen(resp.text) + strlen(resp.topic) + resp.msg_size;
 
+    int response_size = resp.msg_size + sizeof(resp.topic) + sizeof(int);
     // If there's an error sending OK to login, we discard the login attempt
-    if (write(fd, (char *)&resp, resp.msg_size) <= 0)
+    if (write(fd, (char *)&resp, response_size) <= 0)
         printf("[Warning] Unable to respond to the client.\n");
 
     close(fd);

@@ -11,8 +11,8 @@
 #include <errno.h>
 
 // paths for pipe files
-#define MANAGER_FIFO "/fifos/manager_fifo"
-#define FEED_FIFO "/fifos/feed_%d_fifo"
+#define MANAGER_FIFO "fifos/manager_fifo"
+#define FEED_FIFO "fifos/feed_%d_fifo"
 
 #define MSG_MAX_SIZE 300  // Max size of a message
 #define TOPIC_MAX_SIZE 20 // Max size of topics and topic name
