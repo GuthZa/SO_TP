@@ -4,7 +4,21 @@
 // 5 words for a command on this program
 #define MAX_ARGS 5
 
-int logUser(int fd_manager, login login_form);
+/**
+ * @param logIO login
+ * @param subsIO subscribe
+ * @param msg message
+ *
+ * @note union with all message types
+ */
+typedef union
+{
+    login logIO;
+    subscribe subsIO;
+    message msg;
+} msgStruct;
+
+response sendMessage(msgStruct login_form);
 
 int main()
 {
@@ -14,10 +28,10 @@ int main()
 
     userData user;
     msgType type;
-    login login_form;
-    int fd_manager, fd_feed, size;
-
+    response resp;
+    msgStruct msg_struct;
     char message[MSG_MAX_SIZE];
+
     char *argv[MAX_ARGS] = {0};
     int argc = 0;
 
@@ -27,17 +41,17 @@ int main()
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
 
-    if ((fd_manager = open(MANAGER_PIPE, O_WRONLY)) == -1)
+    if (access(MANAGER_FIFO, F_OK) != 0)
     {
-        printf("[Error] Unable to open the server pipe for reading.\n");
+        printf("[Error] Server is currently down.\n");
         exit(1);
     }
 
     /* =================== HANDLES LOGIN ===================== */
     printf("\nHello user!\n\nPlease enter your username: ");
     read(STDIN_FILENO, message, USER_MAX_SIZE);
-    REMOVE_TRAILING_ENTER(message);
 
+    REMOVE_TRAILING_ENTER(message);
     if (strcmp(message, "exit") == 0)
     {
         printf("\nGoodbye\n");
@@ -48,16 +62,18 @@ int main()
     strcpy(user.name, message);
     user.pid = getpid();
 
-    /* ================== SETUP THE PIPES ======================= */
+    /* =============== SETUP THE PIPES & LOGIN ===================== */
 
-    // Checks there's a pipe with the same pid
-    sprintf(FEED_PIPE_FINAL, FEED_PIPE, getpid());
-    checkPipeAvailability(FEED_PIPE_FINAL);
+    // Checks there's a pipe with the same pid or creates one
+    sprintf(FEED_FIFO_FINAL, FEED_FIFO, getpid());
+    checkPipeAvailability(FEED_FIFO_FINAL);
 
-    login_form.type = LOGIN;
-    login_form.user = user;
-    fd_feed = logUser(fd_manager, login_form);
+    msg_struct.logIO.type = LOGIN;
+    msg_struct.logIO.user = user;
+    // Login
+    resp = sendMessage(msg_struct);
 
+    /* ====================== SERVICE START ======================== */
     do
     {
         printf("\n%s # ", user.name);
@@ -78,14 +94,10 @@ int main()
         /* =============== CHECK COMMAND VALIDITY =================== */
         if (strcmp(argv[0], "exit") == 0)
         {
-            login_form.type = LOGOUT;
-            login_form.user = user;
-            if (write(fd_manager, &login_form, sizeof(login)) == -1)
-                printf("[Warning] Unable to respond to the client.\n");
-
-            close(fd_manager);
-            closeService(FEED_PIPE_FINAL);
-            exit(0);
+            msg_struct.logIO.type = LOGOUT;
+            msg_struct.logIO.user = user;
+            resp = sendMessage(msg_struct);
+            closeService(".", FEED_FIFO_FINAL, 1, 0);
         }
 
         if (strcmp(argv[0], "msg") != 0)
@@ -93,6 +105,15 @@ int main()
         }
         else if (strcmp(argv[0], "subscribe") != 0)
         {
+            // msg_struct.subsIO.type = SUBSCRIBE;
+            // msg_struct.subsIO.user = user;
+            // //? Create string validation
+            // strcpy(msg_struct.subsIO.topic, argv[1]);
+            // if (write(fd_manager, &msg_struct.subsIO, sizeof(subscribe)) == -1)
+            //     printf("[Warning] Unable to respond to the client.\n");
+
+            // closeService(FEED_FIFO_FINAL, fd_manager, fd_feed);
+            // exit(0);
         }
         else if (strcmp(argv[0], "unsubscribe") != 0)
         {
@@ -114,41 +135,43 @@ int main()
 
 /**
  * @param fd_manager int
- * @param user userData
+ * @param msg_struct msgStruct
  *
- * @note Sends a login message and handles it
  */
-int logUser(int fd_manager, login login_form)
+response sendMessage(msgStruct msg_struct)
 {
-    int fd_feed;
+    int fd_manager, fd_feed;
     response resp;
 
-    if (write(fd_manager, &login_form, sizeof(login)) == -1)
-    {
-        printf("[Error] Unable to send message.\n");
-        close(fd_manager);
-        exit(1);
-    }
+    if ((fd_manager = open(MANAGER_FIFO, O_WRONLY)) == -1)
+        closeService(
+            "[Error] Unable to open the server pipe for reading.\n",
+            FEED_FIFO_FINAL,
+            0, 1);
 
-    if ((fd_feed = open(FEED_PIPE_FINAL, O_RDONLY)) == -1)
-    {
-        printf("[Error] Unable to open the server pipe for reading.\n");
-        exit(1);
-    }
+    if (write(fd_manager, &msg_struct, sizeof(msg_struct)) == -1)
+        closeService("[Error] Unable to send message.\n",
+                     FEED_FIFO_FINAL,
+                     fd_manager, 0);
+
+    if ((fd_feed = open(FEED_FIFO_FINAL, O_RDONLY)) == -1)
+        closeService("[Error] Unable to open the server pipe for reading.\n",
+                     FEED_FIFO_FINAL,
+                     fd_manager, fd_feed);
 
     if (read(fd_feed, &resp, sizeof(response)) <= 0)
-    {
-        printf("[Error] Unable to read from the server pipe.\n");
-        close(fd_feed);
-        closeService(FEED_PIPE_FINAL);
-        exit(1);
-    }
+        closeService("[Error] Unable to read from the server pipe.\n",
+                     FEED_FIFO_FINAL,
+                     fd_manager, fd_feed);
 
-    printf("%s", resp.msg);
+    printf("%s", resp.text);
     if (strcmp(resp.topic, "WARNING") == 0)
-        closeService(FEED_PIPE_FINAL);
+        closeService(
+            "[WARNING] There was an error loggin in, please try again later.\n",
+            FEED_FIFO_FINAL,
+            fd_manager, fd_feed);
 
-    return fd_feed;
+    return resp;
 }
 
 void handle_closeService(int s, siginfo_t *i, void *v)
