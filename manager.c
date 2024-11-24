@@ -1,6 +1,12 @@
 #include "helper.h"
 #define MAX_PERSIST_MSG 5
 
+/**
+ * @param topic string
+ * @param user pid_t
+ *
+ * @note Saves which users that subscribed a topic
+ */
 typedef struct
 {
     char topic[TOPIC_MAX_SIZE];
@@ -12,9 +18,11 @@ typedef struct
 
 userData acceptUsers(int fd, userData *user_list, int current_users);
 
-void sendMessage(int fd, response resp);
+void sendMessage(response resp);
 
 void logoutUser(userData *user_list, int current_users, int pid);
+
+void signal_EndService(userData *user_list, int current_users);
 
 int main(int argc, char *argv[])
 {
@@ -33,10 +41,10 @@ int main(int argc, char *argv[])
     sigaction(SIGINT, &sa, NULL);
 
     /* ================== SETUP THE PIPES ======================= */
-    int fd_send, fd_manager, size;
-    checkPipeAvailability(MANAGER_PIPE);
+    int fd_manager;
+    checkPipeAvailability(MANAGER_FIFO);
 
-    if ((fd_manager = open(MANAGER_PIPE, O_RDONLY)) == -1)
+    if ((fd_manager = open(MANAGER_FIFO, O_RDONLY)) == -1)
     {
         printf("[Error] Unable to open the server pipe for reading.\n");
         exit(1);
@@ -45,20 +53,15 @@ int main(int argc, char *argv[])
     /* ====================== SERVICE START ======================== */
     do
     {
-        /* ================== ACCEPTS USERS LOGINS ================= */
-        size = read(fd_manager, &type, sizeof(msgType));
-        if (size < 0)
+        //* This should only read if the fifo is NOT empty
+        // But it's stil reading after a logout
+        if (read(fd_manager, &type, sizeof(msgType)) < 0)
         {
-            printf("[Error] Unable to read from the server pipe.\n");
-            union sigval val;
-            val.sival_int = -1;
-            // Sends a signal to all users that service has ended
-            for (int i = 0; i < current_users; i++)
-            {
-                sigqueue(user_list[i].pid, SIGUSR2, val);
-            }
-            close(fd_manager);
-            closeService(MANAGER_PIPE);
+            signal_EndService(user_list, current_users);
+            closeService(
+                "[Error] Unable to read from the server pipe.\n",
+                MANAGER_FIFO,
+                fd_manager, 0);
         }
 
         // Receive information from the user
@@ -71,6 +74,8 @@ int main(int argc, char *argv[])
                 user_list[current_users++] = user;
             break;
         case LOGOUT:
+            //! There's a login call some cycle after the logout
+            // Maybe the information stays in the pipe?
             logoutUser(user_list, current_users, user.pid);
             break;
         case SUBSCRIBE:
@@ -110,7 +115,22 @@ void handle_closeService(int s, siginfo_t *i, void *v)
 {
     printf("Please type exit\n");
     // kill(getpid(), SIGINT);
-    closeService(MANAGER_PIPE);
+    // TODO Don't forget to remove this
+    // It's only while it doesn't have threads
+    // But we don't want the admin to be able to close the service with
+    // Ctrl + C
+    closeService(".", MANAGER_FIFO, 0, 1);
+}
+
+void signal_EndService(userData *user_list, int current_users)
+{
+    union sigval val;
+    val.sival_int = -1;
+    // Sends a signal to all users that service has ended
+    for (int i = 0; i < current_users; i++)
+    {
+        sigqueue(user_list[i].pid, SIGUSR2, val);
+    }
 }
 
 userData acceptUsers(int fd, userData *user_list, int current_users)
@@ -121,10 +141,11 @@ userData acceptUsers(int fd, userData *user_list, int current_users)
     int size = read(fd, &user, sizeof(userData));
     if (size < 0)
     {
-        printf("[Error] Unable to read from the server pipe.\n");
-        close(fd);
-        closeService(MANAGER_PIPE);
-        exit(1);
+        signal_EndService(user_list, current_users);
+        closeService(
+            "[Error] Unable to read from the server pipe.\n",
+            MANAGER_FIFO,
+            fd, 0);
     }
     if (size == 0)
     {
@@ -134,14 +155,13 @@ userData acceptUsers(int fd, userData *user_list, int current_users)
     }
 
     // Setup a message to the client
-    sprintf(FEED_PIPE_FINAL, FEED_PIPE, user.pid);
-    int fd_clnt = open(FEED_PIPE_FINAL, O_WRONLY);
+    sprintf(FEED_FIFO_FINAL, FEED_FIFO, user.pid);
 
     if (current_users >= MAX_USERS)
     {
-        strcpy(resp.msg, "<SERV> We have reached the maximum users available. Sorry, please try again later.\n");
+        strcpy(resp.text, "<SERV> We have reached the maximum users available. Sorry, please try again later.\n");
         strcpy(resp.topic, "WARNING");
-        sendMessage(fd_clnt, resp);
+        sendMessage(resp);
         user.pid = -1;
         return user;
     }
@@ -150,17 +170,17 @@ userData acceptUsers(int fd, userData *user_list, int current_users)
     {
         if (strcmp(user_list[i].name, user.name) == 0)
         {
-            sprintf(resp.msg, "<SERV> There's already a user using the username {%s}, please choose another.\n", user.name);
+            sprintf(resp.text, "<SERV> There's already a user using the username {%s}, please choose another.\n", user.name);
             strcpy(resp.topic, "WARNING");
             user.pid = -1;
-            sendMessage(fd_clnt, resp);
+            sendMessage(resp);
             return user;
         }
     }
 
-    sprintf(resp.msg, "<SERV> Welcome {%s}!\n", user.name);
+    sprintf(resp.text, "<SERV> Welcome {%s}!\n", user.name);
     strcpy(resp.topic, "WELCOME");
-    sendMessage(fd_clnt, resp);
+    sendMessage(resp);
 
     //! TO REMOVE, will clutter the manager screen
     // Is only for the information while developing
@@ -169,17 +189,17 @@ userData acceptUsers(int fd, userData *user_list, int current_users)
 }
 
 /**
- * @param fd file descritor to send the message
  * @param resp struct with msg and topic
  *
  * @note There is no need to initialize "msg_size"
  */
-void sendMessage(int fd, response resp)
+void sendMessage(response resp)
 {
-    resp.msg_size = strlen(resp.msg);
+    int fd = open(FEED_FIFO_FINAL, O_WRONLY);
+    resp.msg_size = strlen(resp.text) + strlen(resp.topic) + resp.msg_size;
 
     // If there's an error sending OK to login, we discard the login attempt
-    if (write(fd, (char *)&resp, sizeof(response)) <= 0)
+    if (write(fd, (char *)&resp, resp.msg_size) <= 0)
         printf("[Warning] Unable to respond to the client.\n");
 
     close(fd);
