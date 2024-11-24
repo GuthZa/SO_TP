@@ -18,7 +18,7 @@ typedef union
     message msg;
 } msgStruct;
 
-response sendMessage(msgStruct login_form);
+void sendMessage(msgStruct login_form);
 
 int main()
 {
@@ -28,7 +28,6 @@ int main()
 
     userData user;
     msgType type;
-    response resp;
     msgStruct msg_struct;
     char message[MSG_MAX_SIZE];
 
@@ -71,7 +70,7 @@ int main()
     msg_struct.logIO.type = LOGIN;
     msg_struct.logIO.user = user;
     // Login
-    resp = sendMessage(msg_struct);
+    sendMessage(msg_struct);
 
     /* ====================== SERVICE START ======================== */
     do
@@ -96,7 +95,7 @@ int main()
         {
             msg_struct.logIO.type = LOGOUT;
             msg_struct.logIO.user = user;
-            resp = sendMessage(msg_struct);
+            sendMessage(msg_struct);
             closeService(".", FEED_FIFO_FINAL, 1, 0);
         }
 
@@ -134,11 +133,10 @@ int main()
 }
 
 /**
- * @param fd_manager int
  * @param msg_struct msgStruct
  *
  */
-response sendMessage(msgStruct msg_struct)
+void sendMessage(msgStruct msg_struct)
 {
     int fd_manager, fd_feed;
     response resp;
@@ -149,6 +147,7 @@ response sendMessage(msgStruct msg_struct)
             FEED_FIFO_FINAL,
             0, 1);
 
+    // TODO change based on type of msgStruct
     if (write(fd_manager, &msg_struct, sizeof(msg_struct)) == -1)
         closeService("[Error] Unable to send message.\n",
                      FEED_FIFO_FINAL,
@@ -159,22 +158,24 @@ response sendMessage(msgStruct msg_struct)
                      FEED_FIFO_FINAL,
                      fd_manager, fd_feed);
 
-    if (read(fd_feed, &resp.msg_size, sizeof(int)) <= 0)
+    if (read(fd_feed, &resp.msg_size, sizeof(int)) <= 0 ||
+        read(fd_feed, &resp.topic, sizeof(resp.topic)) <= 0)
+    {
         closeService("[Error] Unable to read from the server pipe.\n",
                      FEED_FIFO_FINAL,
                      fd_manager, fd_feed);
+    }
 
-    if (read(fd_feed, &resp.topic, sizeof(resp.topic)) <= 0)
-        closeService("[Error] Unable to read from the server pipe.\n",
-                     FEED_FIFO_FINAL,
-                     fd_manager, fd_feed);
-
+    // char tmp_str[MSG_MAX_SIZE];
     if (read(fd_feed, &resp.text, resp.msg_size) <= 0)
         closeService("[Error] Unable to read from the server pipe.\n",
                      FEED_FIFO_FINAL,
                      fd_manager, fd_feed);
 
-    resp.text[resp.msg_size] = '\0';
+    // resp.text = malloc(resp.msg_size);
+
+    // strcpy(resp.text, tmp_str);
+    // resp.text[resp.msg_size] = '\0';
     printf("%s", resp.text);
     if (strcmp(resp.topic, "WARNING") == 0)
         closeService(
@@ -182,7 +183,8 @@ response sendMessage(msgStruct msg_struct)
             FEED_FIFO_FINAL,
             fd_manager, fd_feed);
 
-    return resp;
+    // free(resp.text);
+    return;
 }
 
 void handle_closeService(int s, siginfo_t *i, void *v)
