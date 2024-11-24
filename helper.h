@@ -11,8 +11,8 @@
 #include <errno.h>
 
 // paths for pipe files
-#define MANAGER_PIPE "manager_pipe"
-#define FEED_PIPE "feed_%d_pipe"
+#define MANAGER_FIFO "/fifos/manager_fifo"
+#define FEED_FIFO "/fifos/feed_%d_fifo"
 
 #define MSG_MAX_SIZE 300  // Max size of a message
 #define TOPIC_MAX_SIZE 20 // Max size of topics and topic name
@@ -20,7 +20,7 @@
 
 #define MAX_USERS 10 // Max users
 
-char FEED_PIPE_FINAL[100];
+char FEED_FIFO_FINAL[100];
 
 #define REMOVE_TRAILING_ENTER(str) str[strcspn(str, "\n")] = '\0'
 
@@ -67,9 +67,9 @@ typedef struct
  */
 typedef struct
 {
-    char topic[TOPIC_MAX_SIZE];
     int msg_size;
-    char msg[MSG_MAX_SIZE];
+    char topic[TOPIC_MAX_SIZE];
+    char text[MSG_MAX_SIZE];
 } response;
 
 /**
@@ -89,7 +89,7 @@ typedef struct
     userData user;
     int time; // Time until being deleted
     int msg_size;
-    char msg[MSG_MAX_SIZE];
+    char text[MSG_MAX_SIZE];
 } message;
 
 /**
@@ -107,12 +107,21 @@ typedef struct
 } subscribe;
 
 /**
+ * @param msg Log message to be used
  * @param pipe Pointer to the name of the pipe
+ * @param fd1 File descriptor to close
+ * @param fd1 File descriptor to close
+ *
+ * @remark Use "." to send no message
  *
  * @note Terminates the program
  */
-void closeService(char *pipe)
+void closeService(char *msg, char *pipe, int fd1, int fd2)
 {
+    if (strcmp(".", msg) != 0)
+        printf("%s", msg);
+    close(fd1);
+    close(fd2);
     unlink(pipe);
     printf("\nGoodbye\n");
     exit(0);
