@@ -44,9 +44,9 @@ int main(int argc, char *argv[])
     int fd_manager;
     checkPipeAvailability(MANAGER_FIFO);
 
-    if ((fd_manager = open(MANAGER_FIFO, O_RDONLY)) == -1)
+    if ((fd_manager = open(MANAGER_FIFO, O_RDWR)) == -1)
     {
-        printf("[Error] Unable to open the server pipe for reading.\n");
+        printf("[Error] Unable to open the server pipe for reading - Setup\n");
         exit(1);
     }
 
@@ -55,11 +55,11 @@ int main(int argc, char *argv[])
     {
         //* This should only read if the fifo is NOT empty
         // But it's stil reading after a logout
-        if (read(fd_manager, &type, sizeof(msgType)) < 0)
+        if (read(fd_manager, &type, sizeof(msgType)) <= 0)
         {
             signal_EndService(user_list, current_users);
             closeService(
-                "[Error] Unable to read from the server pipe.\n",
+                "[Error] Unable to read from the server pipe - Type\n",
                 MANAGER_FIFO,
                 fd_manager, 0);
         }
@@ -141,13 +141,13 @@ void acceptUsers(int fd, userData *user_list, int current_users)
     {
         signal_EndService(user_list, current_users);
         closeService(
-            "[Error] Unable to read from the server pipe.\n",
+            "[Error] Unable to read from the server pipe - Login\n",
             MANAGER_FIFO,
             fd, 0);
     }
     if (size == 0)
     {
-        printf("[Warning] Nothing was read from the pipe.\n");
+        printf("[Warning] Nothing was read from the pipe - Login\n");
         return;
     }
 
@@ -214,13 +214,13 @@ void logoutUser(int fd, userData *user_list, int current_users)
     {
         signal_EndService(user_list, current_users);
         closeService(
-            "[Error] Unable to read from the server pipe.\n",
+            "[Error] Unable to read from the server pipe - Logout\n",
             MANAGER_FIFO,
             fd, 0);
     }
     if (size == 0)
     {
-        printf("[Warning] Nothing was read from the pipe.\n");
+        printf("[Warning] Nothing was read from the pipe - Logout\n");
         return;
     }
 

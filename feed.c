@@ -18,7 +18,7 @@ typedef union
     message msg;
 } msgStruct;
 
-void sendMessage(msgStruct login_form);
+void sendMessage(msgStruct login_form, msgType type);
 
 int main()
 {
@@ -67,10 +67,9 @@ int main()
     sprintf(FEED_FIFO_FINAL, FEED_FIFO, getpid());
     checkPipeAvailability(FEED_FIFO_FINAL);
 
-    msg_struct.logIO.type = LOGIN;
     msg_struct.logIO.user = user;
     // Login
-    sendMessage(msg_struct);
+    sendMessage(msg_struct, LOGIN);
 
     /* ====================== SERVICE START ======================== */
     do
@@ -93,9 +92,8 @@ int main()
         /* =============== CHECK COMMAND VALIDITY =================== */
         if (strcmp(argv[0], "exit") == 0)
         {
-            msg_struct.logIO.type = LOGOUT;
             msg_struct.logIO.user = user;
-            sendMessage(msg_struct);
+            sendMessage(msg_struct, LOGOUT);
             closeService(".", FEED_FIFO_FINAL, 1, 0);
         }
 
@@ -136,22 +134,38 @@ int main()
  * @param msg_struct msgStruct
  *
  */
-void sendMessage(msgStruct msg_struct)
+void sendMessage(msgStruct msg_struct, msgType type)
 {
     int fd_manager, fd_feed;
     response resp;
 
     if ((fd_manager = open(MANAGER_FIFO, O_WRONLY)) == -1)
         closeService(
-            "[Error] Unable to open the server pipe for reading.\n",
+            "[Error] Unable to open the server pipe for reading. - \n",
             FEED_FIFO_FINAL,
             0, 1);
 
-    // TODO change based on type of msgStruct
-    if (write(fd_manager, &msg_struct, sizeof(msg_struct)) == -1)
-        closeService("[Error] Unable to send message.\n",
-                     FEED_FIFO_FINAL,
-                     fd_manager, 0);
+    switch (type)
+    {
+    case LOGIN:
+        msg_struct.logIO.type = LOGIN;
+        if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
+            closeService("[Error] Unable to send message - Login\n",
+                         FEED_FIFO_FINAL,
+                         fd_manager, 0);
+        break;
+    case LOGOUT:
+        msg_struct.logIO.type = LOGOUT;
+        if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
+            closeService("[Error] Unable to send message - Logout\n",
+                         FEED_FIFO_FINAL,
+                         fd_manager, 0);
+        closeService(".", FEED_FIFO_FINAL, fd_manager, 0);
+        break;
+
+    default:
+        break;
+    }
 
     if ((fd_feed = open(FEED_FIFO_FINAL, O_RDONLY)) == -1)
         closeService("[Error] Unable to open the server pipe for reading.\n",
@@ -161,14 +175,14 @@ void sendMessage(msgStruct msg_struct)
     if (read(fd_feed, &resp.msg_size, sizeof(int)) <= 0 ||
         read(fd_feed, &resp.topic, sizeof(resp.topic)) <= 0)
     {
-        closeService("[Error] Unable to read from the server pipe.\n",
+        closeService("[Error] Unable to read from the server piped - Response\n",
                      FEED_FIFO_FINAL,
                      fd_manager, fd_feed);
     }
 
     // char tmp_str[MSG_MAX_SIZE];
     if (read(fd_feed, &resp.text, resp.msg_size) <= 0)
-        closeService("[Error] Unable to read from the server pipe.\n",
+        closeService("[Error] Unable to read from the server pipe - Response\n",
                      FEED_FIFO_FINAL,
                      fd_manager, fd_feed);
 
