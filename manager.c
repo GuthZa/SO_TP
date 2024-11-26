@@ -42,24 +42,26 @@ int main(int argc, char *argv[])
 
     /* ================== SETUP THE PIPES ======================= */
     int fd_manager;
-    checkPipeAvailability(MANAGER_FIFO);
+    createFifo(MANAGER_FIFO);
 
     if ((fd_manager = open(MANAGER_FIFO, O_RDWR)) == -1)
     {
-        printf("[Error] Unable to open the server pipe for reading - Setup\n");
+        sprintf(error_msg,
+                "[Error] Code: {%d}\n Unable to open the server pipe for reading - Setup\n",
+                errno);
+        printf(error_msg);
         exit(1);
     }
 
     /* ====================== SERVICE START ======================== */
     do
     {
-        //* This should only read if the fifo is NOT empty
-        // But it's stil reading after a logout
-        if (read(fd_manager, &type, sizeof(msgType)) <= 0)
+        if (read(fd_manager, &type, sizeof(msgType)) < 0)
         {
             signal_EndService(user_list, current_users);
+            sprintf(error_msg, "[Error] Code: {%d}\n Unable to read from the server pipe - Type\n", errno);
             closeService(
-                "[Error] Unable to read from the server pipe - Type\n",
+                error_msg,
                 MANAGER_FIFO,
                 fd_manager, 0);
         }
@@ -140,8 +142,11 @@ void acceptUsers(int fd, userData *user_list, int current_users)
     if (size < 0)
     {
         signal_EndService(user_list, current_users);
+        sprintf(error_msg,
+                "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
+                errno);
         closeService(
-            "[Error] Unable to read from the server pipe - Login\n",
+            error_msg,
             MANAGER_FIFO,
             fd, 0);
     }
@@ -190,8 +195,8 @@ void sendMessage(const char *msg, const char *topic, int pid)
     int fd = open(FEED_FIFO_FINAL, O_WRONLY);
     response resp;
 
-    resp.msg_size = strlen(msg);
-    // resp.text = (char *)malloc(resp.msg_size * sizeof(char));
+    // To account for '\0'
+    resp.msg_size = strlen(msg) + 1;
     strcpy(resp.text, msg);
     strcpy(resp.topic, topic);
 
@@ -199,8 +204,6 @@ void sendMessage(const char *msg, const char *topic, int pid)
     // If there's an error sending OK to login, we discard the login attempt
     if (write(fd, &resp, response_size) <= 0)
         printf("[Warning] Unable to respond to the client.\n");
-
-    // free(resp.text);
     close(fd);
 
     return;
@@ -213,8 +216,11 @@ void logoutUser(int fd, userData *user_list, int current_users)
     if (size < 0)
     {
         signal_EndService(user_list, current_users);
+        sprintf(error_msg,
+                "[Error] Code: {%d}\n Unable to read from the server pipe - Logout\n",
+                errno);
         closeService(
-            "[Error] Unable to read from the server pipe - Logout\n",
+            error_msg,
             MANAGER_FIFO,
             fd, 0);
     }
@@ -241,7 +247,5 @@ void logoutUser(int fd, userData *user_list, int current_users)
     {
         printf("User logged in: %s\n", user_list[j]);
     }
-
-    close(fd);
     return;
 }
