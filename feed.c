@@ -43,7 +43,7 @@ int main()
     if (access(MANAGER_FIFO, F_OK) != 0)
     {
         printf("[Error] Server is currently down.\n");
-        exit(1);
+        exit(EXIT_SUCCESS);
     }
 
     /* =================== HANDLES LOGIN ===================== */
@@ -65,7 +65,7 @@ int main()
 
     // Checks there's a pipe with the same pid or creates one
     sprintf(FEED_FIFO_FINAL, FEED_FIFO, getpid());
-    checkPipeAvailability(FEED_FIFO_FINAL);
+    createFifo(FEED_FIFO_FINAL);
 
     msg_struct.logIO.user = user;
     // Login
@@ -94,9 +94,9 @@ int main()
         {
             msg_struct.logIO.user = user;
             sendMessage(msg_struct, LOGOUT);
-            closeService(".", FEED_FIFO_FINAL, 1, 0);
+            unlink(FEED_FIFO_FINAL);
+            exit(EXIT_SUCCESS);
         }
-
         if (strcmp(argv[0], "msg") != 0)
         {
         }
@@ -140,29 +140,35 @@ void sendMessage(msgStruct msg_struct, msgType type)
     response resp;
 
     if ((fd_manager = open(MANAGER_FIFO, O_WRONLY)) == -1)
-        closeService(
-            "[Error] Unable to open the server pipe for reading. - \n",
-            FEED_FIFO_FINAL,
-            0, 1);
-
+    {
+        sprintf(error_msg, "[Error %d]\n Unable to open the server pipe for reading.\n", errno);
+        closeService(error_msg, FEED_FIFO_FINAL, 0, 1);
+    }
+    sprintf(error_msg, "[Error] {%s}\n Unable to send message\n", type);
     switch (type)
     {
     case LOGIN:
-        msg_struct.logIO.type = LOGIN;
+        msg_struct.logIO.type = type;
         if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
-            closeService("[Error] Unable to send message - Login\n",
-                         FEED_FIFO_FINAL,
-                         fd_manager, 0);
+            closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
         break;
     case LOGOUT:
-        msg_struct.logIO.type = LOGOUT;
+        msg_struct.logIO.type = type;
         if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
-            closeService("[Error] Unable to send message - Logout\n",
-                         FEED_FIFO_FINAL,
-                         fd_manager, 0);
+            closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
         closeService(".", FEED_FIFO_FINAL, fd_manager, 0);
         break;
-
+    case SUBSCRIBE:
+        msg_struct.subsIO.type = type;
+        if (write(fd_manager, &msg_struct.subsIO, sizeof(subscribe)) == -1)
+            closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
+        break;
+    case MESSAGE:
+        msg_struct.msg.type = type;
+        //! Calculate message size
+        if (write(fd_manager, &msg_struct.msg, sizeof(message)) == -1)
+            closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
+        break;
     default:
         break;
     }
@@ -174,22 +180,15 @@ void sendMessage(msgStruct msg_struct, msgType type)
 
     if (read(fd_feed, &resp.msg_size, sizeof(int)) <= 0 ||
         read(fd_feed, &resp.topic, sizeof(resp.topic)) <= 0)
-    {
         closeService("[Error] Unable to read from the server piped - Response\n",
                      FEED_FIFO_FINAL,
                      fd_manager, fd_feed);
-    }
 
-    // char tmp_str[MSG_MAX_SIZE];
     if (read(fd_feed, &resp.text, resp.msg_size) <= 0)
         closeService("[Error] Unable to read from the server pipe - Response\n",
                      FEED_FIFO_FINAL,
                      fd_manager, fd_feed);
 
-    // resp.text = malloc(resp.msg_size);
-
-    // strcpy(resp.text, tmp_str);
-    // resp.text[resp.msg_size] = '\0';
     printf("%s", resp.text);
     if (strcmp(resp.topic, "WARNING") == 0)
         closeService(
@@ -197,7 +196,6 @@ void sendMessage(msgStruct msg_struct, msgType type)
             FEED_FIFO_FINAL,
             fd_manager, fd_feed);
 
-    // free(resp.text);
     return;
 }
 
