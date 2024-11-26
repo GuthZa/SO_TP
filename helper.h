@@ -10,7 +10,7 @@
 #include <signal.h>
 #include <errno.h>
 
-// paths for pipe files
+// paths for fifo files
 #define MANAGER_FIFO "fifos/manager_fifo"
 #define FEED_FIFO "fifos/feed_%d_fifo"
 
@@ -21,6 +21,7 @@
 #define MAX_USERS 10 // Max users
 
 char FEED_FIFO_FINAL[100];
+char error_msg[100];
 
 #define REMOVE_TRAILING_ENTER(str) str[strcspn(str, "\n")] = '\0'
 
@@ -108,7 +109,7 @@ typedef struct
 
 /**
  * @param msg Log message to be used
- * @param pipe Pointer to the name of the pipe
+ * @param fifo Pointer to the name of the fifo
  * @param fd1 File descriptor to close
  * @param fd1 File descriptor to close
  *
@@ -116,35 +117,35 @@ typedef struct
  *
  * @note Terminates the program
  */
-void closeService(char *msg, char *pipe, int fd1, int fd2)
+void closeService(char *msg, char *fifo, int fd1, int fd2)
 {
     if (strcmp(".", msg) != 0)
         printf("%s", msg);
     close(fd1);
     close(fd2);
-    unlink(pipe);
+    unlink(fifo);
     printf("\nGoodbye\n");
     exit(0);
 }
 
 /**
- * @param pipe Pointer to the name of the pipe
+ * @param fifo Pointer to the name of the fifo
  *
  * @note Might terminate the program
  */
-void checkPipeAvailability(char *pipe)
+void createFifo(char *fifo)
 {
     // Checks if the server is already running
-    if (access(pipe, F_OK) == 0)
+    if (access(fifo, F_OK) == 0)
     {
         printf("[Error] Pipe is already open.\n");
         exit(1);
     }
-    if (mkfifo(pipe, 0660) == -1)
+    if (mkfifo(fifo, 0660) == -1)
     {
         if (errno == EEXIST)
-            printf("[Warning] Named pipe already exists or the program is open.\n");
-        printf("[Error] Unable to open the named pipe.\n");
+            printf("[Warning] Named fifo already exists or the program is open.\n");
+        printf("[Error] Unable to open the named fifo.\n");
         exit(1);
     }
 }
