@@ -50,7 +50,7 @@ int main(int argc, char *argv[])
                 "[Error] Code: {%d}\n Unable to open the server pipe for reading - Setup\n",
                 errno);
         printf(error_msg);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     /* ====================== SERVICE START ======================== */
@@ -59,11 +59,10 @@ int main(int argc, char *argv[])
         if (read(fd_manager, &type, sizeof(msgType)) < 0)
         {
             signal_EndService(user_list, current_users);
-            sprintf(error_msg, "[Error] Code: {%d}\n Unable to read from the server pipe - Type\n", errno);
-            closeService(
-                error_msg,
-                MANAGER_FIFO,
-                fd_manager, 0);
+            sprintf(error_msg,
+                    "[Error] Code: {%d}\n Unable to read from the server pipe - Type\n",
+                    errno);
+            closeService(error_msg, MANAGER_FIFO, fd_manager, 0);
         }
 
         // Receive information from the user
@@ -145,10 +144,7 @@ void acceptUsers(int fd, userData *user_list, int current_users)
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
                 errno);
-        closeService(
-            error_msg,
-            MANAGER_FIFO,
-            fd, 0);
+        closeService(error_msg, MANAGER_FIFO, fd, 0);
     }
     if (size == 0)
     {
@@ -167,7 +163,9 @@ void acceptUsers(int fd, userData *user_list, int current_users)
     {
         if (strcmp(user_list[i].name, user.name) == 0)
         {
-            sprintf(tmp_str, "<SERV> There's already a user using the username {%s}, please choose another.\n", user.name);
+            sprintf(tmp_str,
+                    "<SERV> There's already a user using the username {%s}, please choose another.\n",
+                    user.name);
             sendMessage(tmp_str, "WARNING", user.pid);
             return;
         }
@@ -204,11 +202,16 @@ void sendMessage(const char *msg, const char *topic, int pid)
     // If there's an error sending OK to login, we discard the login attempt
     if (write(fd, &resp, response_size) <= 0)
         printf("[Warning] Unable to respond to the client.\n");
-    close(fd);
 
+    close(fd);
     return;
 }
 
+/**
+ * @param fd to receive from
+ * @param user_list the array with all users
+ * @param current_users int
+ */
 void logoutUser(int fd, userData *user_list, int current_users)
 {
     userData user;
@@ -219,10 +222,7 @@ void logoutUser(int fd, userData *user_list, int current_users)
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Unable to read from the server pipe - Logout\n",
                 errno);
-        closeService(
-            error_msg,
-            MANAGER_FIFO,
-            fd, 0);
+        closeService(error_msg, MANAGER_FIFO, fd, 0);
     }
     if (size == 0)
     {

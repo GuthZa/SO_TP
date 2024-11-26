@@ -43,7 +43,7 @@ int main()
     if (access(MANAGER_FIFO, F_OK) != 0)
     {
         printf("[Error] Server is currently down.\n");
-        exit(EXIT_SUCCESS);
+        exit(EXIT_FAILURE);
     }
 
     /* =================== HANDLES LOGIN ===================== */
@@ -54,7 +54,7 @@ int main()
     if (strcmp(message, "exit") == 0)
     {
         printf("\nGoodbye\n");
-        exit(1);
+        exit(EXIT_SUCCESS);
     }
 
     // Fill data from user
@@ -144,29 +144,39 @@ void sendMessage(msgStruct msg_struct, msgType type)
         sprintf(error_msg, "[Error %d]\n Unable to open the server pipe for reading.\n", errno);
         closeService(error_msg, FEED_FIFO_FINAL, 0, 1);
     }
-    sprintf(error_msg, "[Error] {%s}\n Unable to send message\n", type);
+
     switch (type)
     {
     case LOGIN:
+        sprintf(error_msg, "[Error] {Login}\n Unable to send message\n");
         msg_struct.logIO.type = type;
         if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
             closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
         break;
     case LOGOUT:
+        sprintf(error_msg, "[Error] {LOGOUT}\n Unable to send message\n");
         msg_struct.logIO.type = type;
         if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
             closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
         closeService(".", FEED_FIFO_FINAL, fd_manager, 0);
         break;
     case SUBSCRIBE:
+        sprintf(error_msg, "[Error] {SUBSCRIBE}\n Unable to send message\n");
         msg_struct.subsIO.type = type;
         if (write(fd_manager, &msg_struct.subsIO, sizeof(subscribe)) == -1)
             closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
         break;
     case MESSAGE:
+        sprintf(error_msg, "[Error] {MESSAGE}\n Unable to send message\n");
         msg_struct.msg.type = type;
         //! Calculate message size
         if (write(fd_manager, &msg_struct.msg, sizeof(message)) == -1)
+            closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
+        break;
+    case LIST:
+        sprintf(error_msg, "[Error] {LIST}\n Unable to send message\n");
+        msg_struct.subsIO.type = type;
+        if (write(fd_manager, &msg_struct.subsIO, sizeof(subscribe)) == -1)
             closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
         break;
     default:

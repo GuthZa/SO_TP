@@ -124,8 +124,7 @@ void closeService(char *msg, char *fifo, int fd1, int fd2)
     close(fd1);
     close(fd2);
     unlink(fifo);
-    printf("\nGoodbye\n");
-    exit(0);
+    exit(EXIT_FAILURE);
 }
 
 /**
@@ -139,14 +138,14 @@ void createFifo(char *fifo)
     if (access(fifo, F_OK) == 0)
     {
         printf("[Error] Pipe is already open.\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     if (mkfifo(fifo, 0660) == -1)
     {
         if (errno == EEXIST)
             printf("[Warning] Named fifo already exists or the program is open.\n");
         printf("[Error] Unable to open the named fifo.\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 }
 
