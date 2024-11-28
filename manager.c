@@ -15,25 +15,42 @@ typedef struct
     msgData persist_msg[MAX_PERSIST_MSG];
 } topic;
 
-void acceptUsers(int fd, userData *user_list, int current_users);
+/**
+ * @param stop int flag to terminate thread
+ * @param topic_list topic list of topics
+ * @param user_list userData list of users
+ * @param current_users int number of active users
+ * @param current_topics int number of existing topics
+ * @param m thread mutex
+ *
+ * @note Data struct for threads
+ */
+typedef struct
+{
+    int stop;
+    int fd_manager;
+    topic topic_list[TOPIC_MAX_SIZE];
+    userData user_list[MAX_USERS];
+    int current_users;
+    int current_topics;
+    pthread_mutex_t *m;
+} TDATA;
+
+void acceptUsers(void *data);
 
 void sendResponse(const char *msg, const char *topic, int pid);
 
-void logoutUser(int fd, userData *user_list, int current_users);
+void logoutUser(void *data);
 
-void signal_EndService(userData *user_list, int current_users);
+void signal_EndService(void *data);
 
-void subscribeUser(int fd, topic *topic_list, int current_topics);
+void subscribeUser(void *data);
 
 int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
 
     msgType type;
-    userData user_list[MAX_USERS];
-    topic topic_list[TOPIC_MAX_SIZE];
-    int current_users = 0;
-    int current_topics = 0;
 
     // Signal to remove the pipe
     struct sigaction sa;
@@ -45,12 +62,14 @@ int main(int argc, char *argv[])
     pthread_mutex_t mutex;            // criar a variavel mutex
     pthread_mutex_init(&mutex, NULL); // inicializar a variavel mutex
     pthread_t t[2];
+    TDATA data;
+    data.current_users = 0;
+    data.current_topics = 0;
 
-    /* ================== SETUP THE PIPES m */
-    int fd_manager;
+    /* ================== SETUP THE PIPES ================== */
     createFifo(MANAGER_FIFO);
 
-    if ((fd_manager = open(MANAGER_FIFO, O_RDWR)) == -1)
+    if ((data.fd_manager = open(MANAGER_FIFO, O_RDWR)) == -1)
     {
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Unable to open the server pipe for reading - Setup\n",
@@ -62,22 +81,22 @@ int main(int argc, char *argv[])
     /* ====================== SERVICE START ======================== */
     do
     {
-        if (read(fd_manager, &type, sizeof(msgType)) < 0)
+        if (read(data.fd_manager, &type, sizeof(msgType)) < 0)
         {
-            signal_EndService(user_list, current_users);
+            signal_EndService(&data);
             sprintf(error_msg,
                     "[Error] Code: {%d}\n Unable to read from the server pipe - Type\n",
                     errno);
-            closeService(error_msg, MANAGER_FIFO, fd_manager, 0);
+            closeService(error_msg, MANAGER_FIFO, data.fd_manager);
         }
 
         switch (type)
         {
         case LOGIN:
-            acceptUsers(fd_manager, user_list, current_users);
+            acceptUsers(&data);
             break;
         case LOGOUT:
-            logoutUser(fd_manager, user_list, current_users);
+            logoutUser(&data);
             break;
         case SUBSCRIBE:
 
@@ -121,7 +140,7 @@ void handle_closeService(int s, siginfo_t *i, void *v)
     // It's only while it doesn't have threads
     // But we don't want the admin to be able to close the service with
     // Ctrl + C
-    closeService(".", MANAGER_FIFO, 0, 1);
+    closeService(".", MANAGER_FIFO, 0);
 }
 
 /**
@@ -130,28 +149,30 @@ void handle_closeService(int s, siginfo_t *i, void *v)
  *
  * @note Sends a signal to all users that the manager is closing
  */
-void signal_EndService(userData *user_list, int current_users)
+void signal_EndService(void *data)
 {
+    TDATA *pdata = (TDATA *)data;
     union sigval val;
     val.sival_int = -1;
-    for (int i = 0; i < current_users; i++)
-        sigqueue(user_list[i].pid, SIGUSR2, val);
+    for (int i = 0; i < pdata->current_users; i++)
+        sigqueue(pdata->user_list[i].pid, SIGUSR2, val);
 }
 
-void acceptUsers(int fd, userData *user_list, int current_users)
+void acceptUsers(void *data)
 {
+    TDATA *pdata = (TDATA *)data;
     userData user;
     response resp;
     char tmp_str[MSG_MAX_SIZE];
 
-    int size = read(fd, &user, sizeof(userData));
+    int size = read(pdata->fd_manager, &user, sizeof(userData));
     if (size < 0)
     {
-        signal_EndService(user_list, current_users);
+        signal_EndService(data);
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
                 errno);
-        closeService(error_msg, MANAGER_FIFO, fd, 0);
+        closeService(error_msg, MANAGER_FIFO, pdata->fd_manager);
     }
     if (size == 0)
     {
@@ -160,16 +181,16 @@ void acceptUsers(int fd, userData *user_list, int current_users)
         return;
     }
 
-    if (current_users >= MAX_USERS)
+    if (pdata->current_users >= MAX_USERS)
     {
         strcpy(tmp_str, "<SERV> We have reached the maximum users available. Sorry, please try again later.\n");
         sendResponse(tmp_str, "WARNING", user.pid);
         return;
     }
 
-    for (int i = 0; i < current_users; i++)
+    for (int i = 0; i < pdata->current_users; i++)
     {
-        if (strcmp(user_list[i].name, user.name) == 0)
+        if (strcmp(pdata->user_list[i].name, user.name) == 0)
         {
             sprintf(tmp_str,
                     "<SERV> There's already a user using the username {%s}, please choose another.\n",
@@ -220,17 +241,18 @@ void sendResponse(const char *msg, const char *topic, int pid)
  * @param user_list the array with all users
  * @param current_users int
  */
-void logoutUser(int fd, userData *user_list, int current_users)
+void logoutUser(void *data)
 {
+    TDATA *pdata = (TDATA *)data;
     userData user;
-    int size = read(fd, &user, sizeof(userData));
+    int size = read(pdata->fd_manager, &user, sizeof(userData));
     if (size < 0)
     {
-        signal_EndService(user_list, current_users);
+        signal_EndService(data);
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Unable to read from the server pipe - Logout\n",
                 errno);
-        closeService(error_msg, MANAGER_FIFO, fd, 0);
+        closeService(error_msg, MANAGER_FIFO, pdata->fd_manager);
     }
     if (size == 0)
     {
@@ -239,21 +261,21 @@ void logoutUser(int fd, userData *user_list, int current_users)
     }
 
     int isLoggedIn = 0;
-    for (int j = 0; j < current_users; j++)
+    for (int j = 0; j < pdata->current_users; j++)
     {
-        if (user_list[j].pid == user.pid)
+        if (pdata->user_list[j].pid == user.pid)
         {
-            if (j < current_users - 1)
-                user_list[j] = user_list[j++];
-            if (j == current_users - 1)
-                memset(&user_list[j], 0, sizeof(userData));
+            if (j < pdata->current_users - 1)
+                pdata->user_list[j] = pdata->user_list[j++];
+            if (j == pdata->current_users - 1)
+                memset(&pdata->user_list[j], 0, sizeof(userData));
         }
     }
-    current_users--;
+    pdata->current_users--;
 
-    for (int j = 0; j < current_users; j++)
+    for (int j = 0; j < pdata->current_users; j++)
     {
-        printf("User logged in: %s\n", user_list[j]);
+        printf("User logged in: %s\n", pdata->user_list[j]);
     }
     return;
 }
@@ -266,17 +288,19 @@ void logoutUser(int fd, userData *user_list, int current_users)
 //     for (int i = 0; i <)
 // }
 
-void subscribeUser(int fd, topic *topic_list, int current_topics)
+void subscribeUser(void *data)
 {
+    TDATA *pdata = (TDATA *)data;
     userData user;
     char *topic_name;
-    int size = read(fd, &user, sizeof(userData));
+    int size = read(pdata->fd_manager, &user, sizeof(userData));
     if (size < 0)
     {
+        signal_EndService(data);
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
                 errno);
-        closeService(error_msg, MANAGER_FIFO, fd, 0);
+        closeService(error_msg, MANAGER_FIFO, pdata->fd_manager);
     }
     if (size == 0)
     {

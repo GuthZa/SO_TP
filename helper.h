@@ -26,13 +26,6 @@ char error_msg[100];
 
 #define REMOVE_TRAILING_ENTER(str) str[strcspn(str, "\n")] = '\0'
 
-// Data struct for threads
-typedef struct
-{
-    int stop;
-    pthread_mutex_t *m;
-} TDATA;
-
 // Used to wrap each message
 typedef enum
 {
@@ -135,12 +128,11 @@ typedef struct
  *
  * @note Terminates the program
  */
-void closeService(char *msg, char *fifo, int fd1, int fd2)
+void closeService(char *msg, char *fifo, int fd1)
 {
     if (strcmp(".", msg) != 0)
         printf("%s", msg);
     close(fd1);
-    close(fd2);
     unlink(fifo);
     exit(EXIT_FAILURE);
 }
