@@ -147,7 +147,7 @@ void sendMessage(msgStruct msg_struct, msgType type)
     if ((fd_manager = open(MANAGER_FIFO, O_WRONLY)) == -1)
     {
         sprintf(error_msg, "[Error %d]\n Unable to open the server pipe for reading.\n", errno);
-        closeService(error_msg, FEED_FIFO_FINAL, 0, 1);
+        closeService(error_msg, FEED_FIFO_FINAL, 0);
     }
 
     switch (type)
@@ -156,60 +156,71 @@ void sendMessage(msgStruct msg_struct, msgType type)
         sprintf(error_msg, "[Error] {Login}\n Unable to send message\n");
         msg_struct.logIO.type = type;
         if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
-            closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
+            closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
         break;
     case LOGOUT:
         sprintf(error_msg, "[Error] {LOGOUT}\n Unable to send message\n");
         msg_struct.logIO.type = type;
         if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
-            closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
-        closeService(".", FEED_FIFO_FINAL, fd_manager, 0);
+            closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
+        closeService(".", FEED_FIFO_FINAL, fd_manager);
         break;
     case SUBSCRIBE:
         sprintf(error_msg, "[Error] {SUBSCRIBE}\n Unable to send message\n");
         msg_struct.subsIO.type = type;
         if (write(fd_manager, &msg_struct.subsIO, sizeof(subscribe)) == -1)
-            closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
+            closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
         break;
     case MESSAGE:
         sprintf(error_msg, "[Error] {MESSAGE}\n Unable to send message\n");
         msg_struct.msg.type = type;
         //! Calculate message size
         if (write(fd_manager, &msg_struct.msg, sizeof(message)) == -1)
-            closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
+            closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
         break;
     case LIST:
         sprintf(error_msg, "[Error] {LIST}\n Unable to send message\n");
         msg_struct.subsIO.type = type;
         if (write(fd_manager, &msg_struct.subsIO, sizeof(subscribe)) == -1)
-            closeService(error_msg, FEED_FIFO_FINAL, fd_manager, 0);
+            closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
         break;
     default:
         break;
     }
 
-    if ((fd_feed = open(FEED_FIFO_FINAL, O_RDONLY)) == -1)
-        closeService("[Error] Unable to open the server pipe for reading.\n",
-                     FEED_FIFO_FINAL,
-                     fd_manager, fd_feed);
+    int error_flag = 0;
+
+    if ((fd_feed = open(FEED_FIFO_FINAL, O_RDONLY)) < 0)
+    {
+        strcpy(error_msg, "[Error] Unable to open the server pipe for reading.\n");
+        error_flag = 1;
+    }
 
     if (read(fd_feed, &resp.msg_size, sizeof(int)) <= 0 ||
         read(fd_feed, &resp.topic, sizeof(resp.topic)) <= 0)
-        closeService("[Error] Unable to read from the server piped - Response\n",
-                     FEED_FIFO_FINAL,
-                     fd_manager, fd_feed);
+    {
+        strcpy(error_msg, "[Error] Unable to read from the server piped - Response\n");
+        error_flag = 1;
+    }
 
     if (read(fd_feed, &resp.text, resp.msg_size) <= 0)
-        closeService("[Error] Unable to read from the server pipe - Response\n",
-                     FEED_FIFO_FINAL,
-                     fd_manager, fd_feed);
+    {
+        strcpy(error_msg, "[Error] Unable to read from the server pipe - Response\n");
+        error_flag = 1;
+    }
 
     printf("%s", resp.text);
     if (strcmp(resp.topic, "WARNING") == 0)
-        closeService(
-            "[WARNING] There was an error loggin in, please try again later.\n",
-            FEED_FIFO_FINAL,
-            fd_manager, fd_feed);
+    {
+        strcpy(error_msg, "[WARNING] There was an error loggin in, please try again later.\n");
+        error_flag = 1;
+    }
+
+    if (error_flag)
+    {
+        close(fd_feed);
+        closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
+    }
 
     return;
 }
@@ -218,5 +229,5 @@ void handle_closeService(int s, siginfo_t *i, void *v)
 {
     printf("Please type exit\n");
     // kill(getpid(), SIGINT);
-    closeService(".", FEED_FIFO_FINAL, 0, 1);
+    closeService(".", FEED_FIFO_FINAL, 0);
 }
