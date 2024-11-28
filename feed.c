@@ -40,6 +40,11 @@ int main()
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
 
+    // Thread
+    pthread_mutex_t mutex;            // criar a variavel mutex
+    pthread_mutex_init(&mutex, NULL); // inicializar a variavel mutex
+    pthread_t t;
+
     if (access(MANAGER_FIFO, F_OK) != 0)
     {
         printf("[Error] Server is currently down.\n");

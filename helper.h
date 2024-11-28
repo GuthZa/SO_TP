@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <errno.h>
+#include <pthread.h>
 
 // paths for fifo files
 #define MANAGER_FIFO "fifos/manager_fifo"
@@ -24,6 +25,13 @@ char FEED_FIFO_FINAL[100];
 char error_msg[100];
 
 #define REMOVE_TRAILING_ENTER(str) str[strcspn(str, "\n")] = '\0'
+
+// Data struct for threads
+typedef struct
+{
+    int stop;
+    pthread_mutex_t *m;
+} TDATA;
 
 // Used to wrap each message
 typedef enum
@@ -48,6 +56,18 @@ typedef struct
     // in which they login with topics already subscribed
     // char topics[TOPIC_MAX_SIZE];
 } userData;
+
+/**
+ * @param time int
+ * @param msg_size int
+ * @param text char[MSG_MAX_SIZE]
+ */
+typedef struct
+{
+    int time; // Time until being deleted
+    int msg_size;
+    char text[MSG_MAX_SIZE];
+} msgData;
 
 /** Wrappper of userData to login
  * @param type enum with message type
@@ -88,9 +108,7 @@ typedef struct
     msgType type;
     char topic[TOPIC_MAX_SIZE];
     userData user;
-    int time; // Time until being deleted
-    int msg_size;
-    char text[MSG_MAX_SIZE];
+    msgData msg;
 } message;
 
 /**
@@ -134,12 +152,13 @@ void closeService(char *msg, char *fifo, int fd1, int fd2)
  */
 void createFifo(char *fifo)
 {
-    // Checks if the server is already running
+    // Checks if fifo exists
     if (access(fifo, F_OK) == 0)
     {
         printf("[Error] Pipe is already open.\n");
         exit(EXIT_FAILURE);
     }
+    // creates it
     if (mkfifo(fifo, 0660) == -1)
     {
         if (errno == EEXIST)
@@ -150,6 +169,6 @@ void createFifo(char *fifo)
 }
 
 /**
- * @note Is called when pressed Ctrl + C
+ * @note overrides the Ctrl + C signal base
  */
 void handle_closeService(int s, siginfo_t *i, void *v);

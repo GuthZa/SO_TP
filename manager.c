@@ -11,18 +11,19 @@ typedef struct
 {
     char topic[TOPIC_MAX_SIZE];
     pid_t users[MAX_USERS];
+    int current_msgs;
+    msgData persist_msg[MAX_PERSIST_MSG];
 } topic;
-
-// These are global so I can manipulate them from a signal
-// Only for logouts
 
 void acceptUsers(int fd, userData *user_list, int current_users);
 
-void sendMessage(const char *msg, const char *topic, int pid);
+void sendResponse(const char *msg, const char *topic, int pid);
 
 void logoutUser(int fd, userData *user_list, int current_users);
 
 void signal_EndService(userData *user_list, int current_users);
+
+void subscribeUser(int fd, topic *topic_list, int current_topics);
 
 int main(int argc, char *argv[])
 {
@@ -40,7 +41,12 @@ int main(int argc, char *argv[])
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
 
-    /* ================== SETUP THE PIPES ======================= */
+    // Threads
+    pthread_mutex_t mutex;            // criar a variavel mutex
+    pthread_mutex_init(&mutex, NULL); // inicializar a variavel mutex
+    pthread_t t[2];
+
+    /* ================== SETUP THE PIPES m */
     int fd_manager;
     createFifo(MANAGER_FIFO);
 
@@ -65,18 +71,16 @@ int main(int argc, char *argv[])
             closeService(error_msg, MANAGER_FIFO, fd_manager, 0);
         }
 
-        // Receive information from the user
         switch (type)
         {
         case LOGIN:
             acceptUsers(fd_manager, user_list, current_users);
             break;
         case LOGOUT:
-            //! There's a login call some cycle after the logout
-            // Maybe the information stays in the pipe?
             logoutUser(fd_manager, user_list, current_users);
             break;
         case SUBSCRIBE:
+
             break;
         case MESSAGE:
             break;
@@ -120,15 +124,18 @@ void handle_closeService(int s, siginfo_t *i, void *v)
     closeService(".", MANAGER_FIFO, 0, 1);
 }
 
+/**
+ * @param user_list
+ * @param current_users int size of user_list
+ *
+ * @note Sends a signal to all users that the manager is closing
+ */
 void signal_EndService(userData *user_list, int current_users)
 {
     union sigval val;
     val.sival_int = -1;
-    // Sends a signal to all users that service has ended
     for (int i = 0; i < current_users; i++)
-    {
         sigqueue(user_list[i].pid, SIGUSR2, val);
-    }
 }
 
 void acceptUsers(int fd, userData *user_list, int current_users)
@@ -148,6 +155,7 @@ void acceptUsers(int fd, userData *user_list, int current_users)
     }
     if (size == 0)
     {
+        //? Maybe send signal to user
         printf("[Warning] Nothing was read from the pipe - Login\n");
         return;
     }
@@ -155,7 +163,7 @@ void acceptUsers(int fd, userData *user_list, int current_users)
     if (current_users >= MAX_USERS)
     {
         strcpy(tmp_str, "<SERV> We have reached the maximum users available. Sorry, please try again later.\n");
-        sendMessage(tmp_str, "WARNING", user.pid);
+        sendResponse(tmp_str, "WARNING", user.pid);
         return;
     }
 
@@ -166,13 +174,13 @@ void acceptUsers(int fd, userData *user_list, int current_users)
             sprintf(tmp_str,
                     "<SERV> There's already a user using the username {%s}, please choose another.\n",
                     user.name);
-            sendMessage(tmp_str, "WARNING", user.pid);
+            sendResponse(tmp_str, "WARNING", user.pid);
             return;
         }
     }
 
     sprintf(tmp_str, "<SERV> Welcome {%s}!\n", user.name);
-    sendMessage(tmp_str, "WELCOME", user.pid);
+    sendResponse(tmp_str, "WELCOME", user.pid);
 
     //! TO REMOVE, will clutter the manager screen
     // Is only for the information while developing
@@ -187,7 +195,7 @@ void acceptUsers(int fd, userData *user_list, int current_users)
  *
  * @note it automatically calculates the correct message size
  */
-void sendMessage(const char *msg, const char *topic, int pid)
+void sendResponse(const char *msg, const char *topic, int pid)
 {
     sprintf(FEED_FIFO_FINAL, FEED_FIFO, pid);
     int fd = open(FEED_FIFO_FINAL, O_WRONLY);
@@ -248,4 +256,31 @@ void logoutUser(int fd, userData *user_list, int current_users)
         printf("User logged in: %s\n", user_list[j]);
     }
     return;
+}
+
+/**
+ *
+ */
+// void *updateMessageCounter()
+// {
+//     for (int i = 0; i <)
+// }
+
+void subscribeUser(int fd, topic *topic_list, int current_topics)
+{
+    userData user;
+    char *topic_name;
+    int size = read(fd, &user, sizeof(userData));
+    if (size < 0)
+    {
+        sprintf(error_msg,
+                "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
+                errno);
+        closeService(error_msg, MANAGER_FIFO, fd, 0);
+    }
+    if (size == 0)
+    {
+        printf("[Warning] Nothing was read from the pipe - Login\n");
+        return;
+    }
 }
