@@ -12,6 +12,7 @@ typedef struct
     char topic[TOPIC_MAX_SIZE];
     pid_t users[MAX_USERS];
     int current_msgs;
+    int current_user;
     msgData persist_msg[MAX_PERSIST_MSG];
 } topic;
 
@@ -46,6 +47,10 @@ void signal_EndService(void *data);
 
 void subscribeUser(void *data);
 
+void getFromFile(void *data);
+
+void saveToFile(void *data);
+
 int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
@@ -65,6 +70,12 @@ int main(int argc, char *argv[])
     TDATA data;
     data.current_users = 0;
     data.current_topics = 0;
+    data.topic_list->current_msgs = 0;
+    data.topic_list->current_user = 0;
+
+    /* ================= READ THE FILE ==================== */
+    getFromFile(&data);
+    printf("%s", data.topic_list->persist_msg[0].text);
 
     /* ================== SETUP THE PIPES ================== */
     createFifo(MANAGER_FIFO);
@@ -172,6 +183,7 @@ void acceptUsers(void *data)
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
                 errno);
+        saveToFile(data);
         closeService(error_msg, MANAGER_FIFO, pdata->fd_manager);
     }
     if (size == 0)
@@ -183,8 +195,7 @@ void acceptUsers(void *data)
 
     if (pdata->current_users >= MAX_USERS)
     {
-        strcpy(tmp_str, "<SERV> We have reached the maximum users available. Sorry, please try again later.\n");
-        sendResponse(tmp_str, "WARNING", user.pid);
+        sendResponse("<SERV> We have reached the maximum users available. Sorry, please try again later.\n", "WARNING", user.pid);
         return;
     }
 
@@ -252,6 +263,7 @@ void logoutUser(void *data)
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Unable to read from the server pipe - Logout\n",
                 errno);
+        saveToFile(data);
         closeService(error_msg, MANAGER_FIFO, pdata->fd_manager);
     }
     if (size == 0)
@@ -265,8 +277,10 @@ void logoutUser(void *data)
     {
         if (pdata->user_list[j].pid == user.pid)
         {
+            // Its not the last user of the array
             if (j < pdata->current_users - 1)
-                pdata->user_list[j] = pdata->user_list[j++];
+                pdata->user_list[j] = pdata->user_list[j + 1];
+            // Its the last user
             if (j == pdata->current_users - 1)
                 memset(&pdata->user_list[j], 0, sizeof(userData));
         }
@@ -283,10 +297,24 @@ void logoutUser(void *data)
 /**
  *
  */
-// void *updateMessageCounter()
-// {
-//     for (int i = 0; i <)
-// }
+void *updateMessageCounter(void *data)
+{
+    TDATA *pdata = (TDATA *)data;
+    msgData *pmsgs = (msgData *)pdata->topic_list->persist_msg;
+    for (int i = 0; i < pdata->topic_list->current_msgs; i++)
+    {
+        pmsgs->time--;
+        if (pmsgs->time == 0)
+        {
+            // Its not the last message in the array
+            if (i < pdata->topic_list->current_msgs - 1)
+                pmsgs[i] = pmsgs[i + 1];
+            // Its the last message
+            if (i == pdata->topic_list->current_msgs - 1)
+                memset(&pmsgs[i], 0, sizeof(msgData));
+        }
+    }
+}
 
 void subscribeUser(void *data)
 {
@@ -300,6 +328,7 @@ void subscribeUser(void *data)
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
                 errno);
+        saveToFile(data);
         closeService(error_msg, MANAGER_FIFO, pdata->fd_manager);
     }
     if (size == 0)
@@ -307,4 +336,99 @@ void subscribeUser(void *data)
         printf("[Warning] Nothing was read from the pipe - Login\n");
         return;
     }
+}
+
+void getFromFile(void *data)
+{
+    FILE *fptr;
+    TDATA *pdata = (TDATA *)data;
+    char *file_name = getenv("MSG_FICH");
+    if (file_name == NULL)
+    {
+        printf("[Error] Read file - Unable to get the file name from the environment variable.\n");
+        exit(EXIT_FAILURE);
+    }
+    fptr = fopen(file_name, "r");
+    if (fptr == NULL)
+    {
+        printf("[Error] Read file - Unable to read information.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (fgets(pdata->topic_list->topic, TOPIC_MAX_SIZE, fptr) == NULL)
+    {
+        printf("[Error] Read file - Couldn't read the topic name.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (fgets(pdata->topic_list->persist_msg->user, USER_MAX_SIZE, fptr) == NULL)
+    {
+        printf("[Error] Read file - Couldn't read the user.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    int time = (int)fgetc(fptr) - '0';
+    if (time == EOF)
+    {
+        printf("[Error] Code: {%d}\n Read file - Couldn't read the message time.\n");
+        exit(EXIT_FAILURE);
+    }
+    else
+    {
+        pdata->topic_list->persist_msg->time = time;
+    }
+
+    if (fgets(pdata->topic_list->persist_msg->text, MSG_MAX_SIZE, fptr) == NULL)
+    {
+        printf("[Error] Read file - Couldn't read the message.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    fclose(fptr);
+    return;
+}
+
+void saveToFile(void *data)
+{
+    FILE *fptr;
+    TDATA *pdata = (TDATA *)data;
+    char *file_name = getenv("MSG_FICH");
+    if (file_name == NULL)
+    {
+        printf("[Error] Read file - Unable to get the file name from the environment variable.\n");
+        exit(EXIT_FAILURE);
+    }
+    fptr = fopen(file_name, "w");
+    if (fptr == NULL)
+    {
+        printf("[Error] Save file - Unable to save information.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (fprintf(fptr, pdata->topic_list->topic) == -1)
+    {
+        printf("[Error] Save file - Couldn't save the topic name.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (fprintf(fptr, pdata->topic_list->persist_msg->user) == -1)
+    {
+        printf("[Error] Save file - Couldn't save the user.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (fprintf(fptr, "%d", pdata->topic_list->persist_msg->time) == -1)
+    {
+        printf("[Error] Save file - Couldn't save the message time.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (fprintf(fptr, pdata->topic_list->persist_msg->text) == -1)
+    {
+        printf("[Error] Save file - Couldn't save the message.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    fclose(fptr);
+    return;
 }

@@ -60,6 +60,7 @@ typedef struct
     int time; // Time until being deleted
     int msg_size;
     char text[MSG_MAX_SIZE];
+    char user[USER_MAX_SIZE];
 } msgData;
 
 /** Wrappper of userData to login

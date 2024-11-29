@@ -82,6 +82,7 @@ int main()
         printf("\n%s # ", user.name);
         read(STDIN_FILENO, message, MSG_MAX_SIZE);
 
+        //! Is giving seg fault when only has \n as input
         REMOVE_TRAILING_ENTER(message);
         // Divides the input of the user in multiple strings
         // Similar to the way argv is handled
@@ -188,36 +189,32 @@ void sendMessage(msgStruct msg_struct, msgType type)
         break;
     }
 
-    int error_flag = 0;
-
     if ((fd_feed = open(FEED_FIFO_FINAL, O_RDONLY)) < 0)
     {
         strcpy(error_msg, "[Error] Unable to open the server pipe for reading.\n");
-        error_flag = 1;
+        close(fd_feed);
+        closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
     }
 
     if (read(fd_feed, &resp.msg_size, sizeof(int)) <= 0 ||
         read(fd_feed, &resp.topic, sizeof(resp.topic)) <= 0)
     {
         strcpy(error_msg, "[Error] Unable to read from the server piped - Response\n");
-        error_flag = 1;
+        close(fd_feed);
+        closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
     }
 
     if (read(fd_feed, &resp.text, resp.msg_size) <= 0)
     {
         strcpy(error_msg, "[Error] Unable to read from the server pipe - Response\n");
-        error_flag = 1;
+        close(fd_feed);
+        closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
     }
 
     printf("%s", resp.text);
     if (strcmp(resp.topic, "WARNING") == 0)
     {
         strcpy(error_msg, "[WARNING] There was an error loggin in, please try again later.\n");
-        error_flag = 1;
-    }
-
-    if (error_flag)
-    {
         close(fd_feed);
         closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
     }
