@@ -1,24 +1,7 @@
-#include "helper.h"
+#include "feed.h"
 
-// There doesn't exist a world where the user might need more than
-// 5 words for a command on this program
-#define MAX_ARGS 5
-
-/**
- * @param logIO login
- * @param subsIO subscribe
- * @param msg message
- *
- * @note union with all message types
- */
-typedef union
-{
-    login logIO;
-    subscribe subsIO;
-    message msg;
-} msgStruct;
-
-void sendMessage(msgStruct login_form, msgType type);
+char FEED_FIFO_FINAL[100];
+char error_msg[100];
 
 int main()
 {
@@ -136,10 +119,6 @@ int main()
     exit(EXIT_SUCCESS);
 }
 
-/**
- * @param msg_struct msgStruct
- *
- */
 void sendMessage(msgStruct msg_struct, msgType type)
 {
     int fd_manager, fd_feed;

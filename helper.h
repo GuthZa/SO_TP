@@ -21,9 +21,6 @@
 
 #define MAX_USERS 10 // Max users
 
-char FEED_FIFO_FINAL[100];
-char error_msg[100];
-
 #define REMOVE_TRAILING_ENTER(str) str[strcspn(str, "\n")] = '\0'
 
 // Used to wrap each message
@@ -129,37 +126,14 @@ typedef struct
  *
  * @note Terminates the program
  */
-void closeService(char *msg, char *fifo, int fd1)
-{
-    if (strcmp(".", msg) != 0)
-        printf("%s", msg);
-    close(fd1);
-    unlink(fifo);
-    exit(EXIT_FAILURE);
-}
+void closeService(char *msg, char *fifo, int fd1);
 
 /**
  * @param fifo Pointer to the name of the fifo
  *
  * @note Might terminate the program
  */
-void createFifo(char *fifo)
-{
-    // Checks if fifo exists
-    if (access(fifo, F_OK) == 0)
-    {
-        printf("[Error] Pipe is already open.\n");
-        exit(EXIT_FAILURE);
-    }
-    // creates it
-    if (mkfifo(fifo, 0660) == -1)
-    {
-        if (errno == EEXIST)
-            printf("[Warning] Named fifo already exists or the program is open.\n");
-        printf("[Error] Unable to open the named fifo.\n");
-        exit(EXIT_FAILURE);
-    }
-}
+void createFifo(char *fifo);
 
 /**
  * @note overrides the Ctrl + C signal base
