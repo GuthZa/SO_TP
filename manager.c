@@ -1,55 +1,7 @@
-#include "helper.h"
-#define MAX_PERSIST_MSG 5
+#include "manager.h"
 
-/**
- * @param topic string
- * @param user pid_t
- *
- * @note Saves which users that subscribed a topic
- */
-typedef struct
-{
-    char topic[TOPIC_MAX_SIZE];
-    pid_t users[MAX_USERS];
-    int current_msgs;
-    int current_user;
-    msgData persist_msg[MAX_PERSIST_MSG];
-} topic;
-
-/**
- * @param stop int flag to terminate thread
- * @param topic_list topic list of topics
- * @param user_list userData list of users
- * @param current_users int number of active users
- * @param current_topics int number of existing topics
- * @param m thread mutex
- *
- * @note Data struct for threads
- */
-typedef struct
-{
-    int stop;
-    int fd_manager;
-    topic topic_list[TOPIC_MAX_SIZE];
-    userData user_list[MAX_USERS];
-    int current_users;
-    int current_topics;
-    pthread_mutex_t *m;
-} TDATA;
-
-void acceptUsers(void *data);
-
-void sendResponse(const char *msg, const char *topic, int pid);
-
-void logoutUser(void *data);
-
-void signal_EndService(void *data);
-
-void subscribeUser(void *data);
-
-void getFromFile(void *data);
-
-void saveToFile(void *data);
+char FEED_FIFO_FINAL[100];
+char error_msg[100];
 
 int main(int argc, char *argv[])
 {
@@ -75,7 +27,6 @@ int main(int argc, char *argv[])
 
     /* ================= READ THE FILE ==================== */
     getFromFile(&data);
-    printf("%s", data.topic_list->persist_msg[0].text);
 
     /* ================== SETUP THE PIPES ================== */
     createFifo(MANAGER_FIFO);
@@ -337,98 +288,92 @@ void subscribeUser(void *data)
         return;
     }
 }
-
+/*
 void getFromFile(void *data)
 {
-    FILE *fptr;
-    TDATA *pdata = (TDATA *)data;
-    char *file_name = getenv("MSG_FICH");
-    if (file_name == NULL)
-    {
-        printf("[Error] Read file - Unable to get the file name from the environment variable.\n");
-        exit(EXIT_FAILURE);
-    }
-    fptr = fopen(file_name, "r");
-    if (fptr == NULL)
-    {
-        printf("[Error] Read file - Unable to read information.\n");
-        exit(EXIT_FAILURE);
-    }
+   FILE *fptr;
+   TDATA *pdata = (TDATA *)data;
+   char *file_name = getenv("MSG_FICH");
+   if (file_name == NULL)
+   {
+       printf("[Error] Read file - Unable to get the file name from the environment variable.\n");
+       exit(EXIT_FAILURE);
+   }
+   fptr = fopen(file_name, "r");
+   if (fptr == NULL)
+   {
+       printf("[Error] Read file - Unable to read information.\n");
+       exit(EXIT_FAILURE);
+   }
 
-    if (fgets(pdata->topic_list->topic, TOPIC_MAX_SIZE, fptr) == NULL)
-    {
-        printf("[Error] Read file - Couldn't read the topic name.\n");
-        exit(EXIT_FAILURE);
-    }
+   int msg_count = 0, topic_count = 0;
+   char temp_topic[20];
+   while (!feof(fptr))
+   {
+       fscanf(fptr, "%s", temp_topic);
+       if (!strcmp(temp_topic, pdata->topic_list[pdata->current_topics].topic))
+           topic_count++;
 
-    if (fgets(pdata->topic_list->persist_msg->user, USER_MAX_SIZE, fptr) == NULL)
-    {
-        printf("[Error] Read file - Couldn't read the user.\n");
-        exit(EXIT_FAILURE);
-    }
+       strcpy(pdata->topic_list[topic_count].topic, temp_topic);
+       //! Do NOT remove the last space from the formatter
+       // it "removes" the first space from the msg
+       fscanf(fptr, "%s %d ",
+              pdata->topic_list[topic_count]
+                  .persist_msg[msg_count]
+                  .user,
+              &pdata->topic_list[topic_count]
+                   .persist_msg[msg_count]
+                   .time);
 
-    int time = (int)fgetc(fptr) - '0';
-    if (time == EOF)
-    {
-        printf("[Error] Code: {%d}\n Read file - Couldn't read the message time.\n");
-        exit(EXIT_FAILURE);
-    }
-    else
-    {
-        pdata->topic_list->persist_msg->time = time;
-    }
+       fgets(pdata->topic_list[topic_count]
+                 .persist_msg[msg_count]
+                 .text,
+             MSG_MAX_SIZE, fptr);
 
-    if (fgets(pdata->topic_list->persist_msg->text, MSG_MAX_SIZE, fptr) == NULL)
-    {
-        printf("[Error] Read file - Couldn't read the message.\n");
-        exit(EXIT_FAILURE);
-    }
+       REMOVE_TRAILING_ENTER(pdata->topic_list[topic_count].persist_msg[msg_count].text);
+       msg_count++;
+   }
 
-    fclose(fptr);
-    return;
+   pdata->current_topics = topic_count;
+   pdata->topic_list->current_msgs = msg_count;
+   fclose(fptr);
+   return;
 }
 
 void saveToFile(void *data)
 {
-    FILE *fptr;
-    TDATA *pdata = (TDATA *)data;
-    char *file_name = getenv("MSG_FICH");
-    if (file_name == NULL)
-    {
-        printf("[Error] Read file - Unable to get the file name from the environment variable.\n");
-        exit(EXIT_FAILURE);
-    }
-    fptr = fopen(file_name, "w");
-    if (fptr == NULL)
-    {
-        printf("[Error] Save file - Unable to save information.\n");
-        exit(EXIT_FAILURE);
-    }
+   FILE *fptr;
+   TDATA *pdata = (TDATA *)data;
+   char *file_name = getenv("MSG_FICH");
+   if (file_name == NULL)
+   {
+       printf("[Error] Read file - Unable to get the file name from the environment variable.\n");
+       exit(EXIT_FAILURE);
+   }
+   fptr = fopen(file_name, "w");
+   if (fptr == NULL)
+   {
+       printf("[Error] Save file - Unable to save information.\n");
+       exit(EXIT_FAILURE);
+   }
 
-    if (fprintf(fptr, pdata->topic_list->topic) == -1)
-    {
-        printf("[Error] Save file - Couldn't save the topic name.\n");
-        exit(EXIT_FAILURE);
-    }
+   int new_topic_flag = 1;
+   char last_topic[TOPIC_MAX_SIZE];
+   for (int i = 0; i < pdata->current_topics; i++)
+   {
+       for (int j = 0; j < pdata->topic_list->current_msgs; j++)
+       {
+           fprintf(fptr,
+                   "%s %s %c %s",
+                   pdata->topic_list[i].topic,
+                   pdata->topic_list[i].persist_msg[j].user,
+                   pdata->topic_list[i].persist_msg[j].time,
+                   pdata->topic_list[i].persist_msg[j].text);
+       }
+   }
 
-    if (fprintf(fptr, pdata->topic_list->persist_msg->user) == -1)
-    {
-        printf("[Error] Save file - Couldn't save the user.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if (fprintf(fptr, "%d", pdata->topic_list->persist_msg->time) == -1)
-    {
-        printf("[Error] Save file - Couldn't save the message time.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if (fprintf(fptr, pdata->topic_list->persist_msg->text) == -1)
-    {
-        printf("[Error] Save file - Couldn't save the message.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    fclose(fptr);
-    return;
+   fclose(fptr);
+   return;
 }
+
+*/
