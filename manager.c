@@ -8,8 +8,6 @@ int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
 
-    msgType type;
-
     // Signal to remove the pipe
     struct sigaction sa;
     sa.sa_sigaction = handle_closeService;
@@ -49,7 +47,7 @@ int main(int argc, char *argv[])
         closeService(error_msg, MANAGER_FIFO, &data);
     }
 
-    if (pthread_create(&t[1], NULL, &receiveAdminInput, &data) != 0)
+    if (pthread_create(&t[1], NULL, &handleFifoCommunication, &data) != 0)
     {
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Thread setup failed. \n",
@@ -58,34 +56,18 @@ int main(int argc, char *argv[])
     }
 
     /* =================== SERVICE START ===================== */
+    char msg[MSG_MAX_SIZE]; // to save admin input
     do
     {
-        if (read(data.fd_manager, &type, sizeof(msgType)) < 0)
+        printf("# ");
+        read(STDIN_FILENO, msg, MSG_MAX_SIZE);
+        REMOVE_TRAILING_ENTER(msg);
+
+        if (strcmp(msg, "exit") == 0)
         {
             signal_EndService(&data);
-            sprintf(error_msg,
-                    "[Error] Code: {%d}\n Unable to read from the server pipe - Type\n",
-                    errno);
-            closeService(error_msg, MANAGER_FIFO, &data);
+            closeService(".", MANAGER_FIFO, &data);
         }
-
-        switch (type)
-        {
-        case LOGIN:
-            acceptUsers(&data);
-            break;
-        case LOGOUT:
-            logoutUser(&data);
-            break;
-        case SUBSCRIBE:
-
-            break;
-        case MESSAGE:
-            break;
-        case LIST:
-            break;
-        }
-        type = -1;
 
         // /* ======== CHECK FOR MAX TOPICS AND DUPLICATE TOPICS ======= */
         // // Receive topic from user
@@ -111,21 +93,40 @@ int main(int argc, char *argv[])
     exit(EXIT_SUCCESS);
 }
 
-void *receiveAdminInput(void *data)
+void *handleFifoCommunication(void *data)
 {
+    msgType type;
     TDATA *pdata = (TDATA *)data;
-    char msg[MSG_MAX_SIZE]; // to save admin input
     do
     {
-        printf("# ");
-        read(STDIN_FILENO, msg, MSG_MAX_SIZE);
-        REMOVE_TRAILING_ENTER(msg);
-
-        if (strcmp(msg, "exit") == 0)
+        if (read(pdata->fd_manager, &type, sizeof(msgType)) < 0)
         {
             signal_EndService(data);
-            closeService(".", MANAGER_FIFO, data);
+            sprintf(error_msg,
+                    "[Error] Code: {%d}\n Unable to read from the server pipe - Type\n",
+                    errno);
+            closeService(error_msg, MANAGER_FIFO, data);
         }
+
+        switch (type)
+        {
+        case LOGIN:
+            acceptUsers(data);
+            break;
+        case LOGOUT:
+            logoutUser(data);
+            break;
+        case SUBSCRIBE:
+
+            break;
+        case MESSAGE:
+            break;
+        case LIST:
+            break;
+        default:
+            type = -1;
+        }
+        type = -1;
     } while (!pdata->stop);
     pthread_exit(NULL);
 }
@@ -331,15 +332,17 @@ void closeService(char *msg, char *fifo, void *data)
     TDATA *pdata = (TDATA *)data;
     if (strcmp(".", msg) != 0)
         printf("%s\n", msg);
-    pdata->stop = 1;
+
     printf("Stopping background processes...\n");
+    pdata->stop = 1;
+    msgType type = -1;
+    write(pdata->fd_manager, &type, sizeof(msgType));
     if (pthread_join(t[0], NULL) == EDEADLK)
         printf("[Warning] Deadlock when closing the thread for the timer\n");
-    pthread_join(t[1], NULL);
-    //* this will always warn because I'm not using pthread_exit(NULL)
-    // if (pthread_join(t[1], NULL) == EDEADLK)
-    // printf("[Warning] Deadlock when closing the thread for input\n");
+    if (pthread_join(t[1], NULL) == EDEADLK)
+        printf("[Warning] Deadlock when closing the thread for input\n");
     pthread_mutex_destroy(&mutex);
+
     printf("Closing fifos...\n");
     close(pdata->fd_manager);
     unlink(fifo);

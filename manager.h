@@ -57,7 +57,7 @@ void saveToFile(void *data);
 
 void *updateMessageCounter(void *data);
 
-void *receiveAdminInput(void *data);
+void *handleFifoCommunication(void *data);
 /**
  * @param msg Log message to be used
  * @param fifo Pointer to the name of the fifo
