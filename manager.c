@@ -123,7 +123,6 @@ void *handleFifoCommunication(void *data)
                 printf("[Warning] Nothing was read from the pipe - Login\n");
 
             acceptUsers(data, user);
-            printf("Accepted the user");
             break;
         case LOGOUT:
             size = read(fd_manager, &user, sizeof(userData));
@@ -296,25 +295,23 @@ void *updateMessageCounter(void *data)
     do
     {
         pthread_mutex_lock(pdata->m);
-        // for (int j = 0; j < pdata->current_topics; j++)
-        // {
-        //     for (int i = 0; i < pdata->topic_list[j].persistent_msg_count; i++)
-        //     {
-        //         if (--pdata->topic_list[j].persist_msg[i].time == 0)
-        //         {
-        //             printf("j = %d, i = %d, time = %d\n",
-        //                    i, j, pdata->topic_list[j].persist_msg[i].time);
-        //             // Its not the last message in the array
-        //             if (i < pdata->topic_list[j].persistent_msg_count - 1)
-        //                 memcpy(&pdata->topic_list[j].persist_msg[i],
-        //                        &pdata->topic_list[j].persist_msg[i + 1],
-        //                        sizeof(msgData));
-        //             // Its the last message
-        //             if (i == pdata->topic_list[j].persistent_msg_count - 1)
-        //                 memset(&pdata->topic_list[j].persist_msg[i], 0, sizeof(msgData));
-        //         }
-        //     }
-        // }
+        for (int j = 0; j < pdata->current_topics; j++)
+        {
+            for (int i = 0; i < pdata->topic_list[j].persistent_msg_count; i++)
+            {
+                if (--pdata->topic_list[j].persist_msg[i].time <= 0)
+                {
+                    // Its not the last message in the array
+                    if (i < pdata->topic_list[j].persistent_msg_count - 1)
+                        memcpy(&pdata->topic_list[j].persist_msg[i],
+                               &pdata->topic_list[j].persist_msg[i + 1],
+                               sizeof(msgData));
+                    // Its the last message
+                    if (i == pdata->topic_list[j].persistent_msg_count - 1)
+                        memset(&pdata->topic_list[j].persist_msg[i], 0, sizeof(msgData));
+                }
+            }
+        }
         pthread_mutex_unlock(pdata->m);
         sleep(1);
     } while (!pdata->stop);
@@ -368,111 +365,3 @@ void closeService(char *msg, void *data)
 
     strcmp(msg, ".") == 0 ? exit(EXIT_SUCCESS) : exit(EXIT_FAILURE);
 }
-
-//! to remove
-/*
-void getFromFile(void *data)
-{
-    FILE *fptr;
-    TDATA *pdata = (TDATA *)data;
-    char *file_name = getenv("MSG_FICH");
-    if (file_name == NULL)
-    {
-        printf("[Error] Read file - Unable to get the file name from the environment variable.\n");
-        exit(EXIT_FAILURE);
-    }
-    fptr = fopen(file_name, "r");
-    if (fptr == NULL)
-    {
-        printf("[Warning] Read file - File does not exist, no information read.\n");
-        return;
-    }
-
-    int msg_count = 0, topic_count = 0;
-    char temp_topic[20];
-    while (!feof(fptr))
-    {
-        fscanf(fptr, "%s", temp_topic);
-        if (!strcmp(temp_topic, pdata->topic_list[pdata->current_topics].topic))
-            topic_count++;
-
-        strcpy(pdata->topic_list[topic_count].topic, temp_topic);
-        //! Do NOT remove the last space from the formatter
-        // it "removes" the first space from the msg
-        fscanf(fptr, "%s %d ",
-               pdata->topic_list[topic_count]
-                   .persist_msg[msg_count]
-                   .user,
-               &pdata->topic_list[topic_count]
-                    .persist_msg[msg_count]
-                    .time);
-
-        fgets(pdata->topic_list[topic_count]
-                  .persist_msg[msg_count]
-                  .text,
-              MSG_MAX_SIZE, fptr);
-
-        REMOVE_TRAILING_ENTER(pdata->topic_list[topic_count].persist_msg[msg_count].text);
-        msg_count++;
-    }
-
-    pdata->current_topics = topic_count;
-    pdata->topic_list->persistent_msg_count = msg_count;
-    fclose(fptr);
-    return;
-}
-
-void saveToFile(void *data)
-{
-    FILE *fptr;
-    TDATA *pdata = (TDATA *)data;
-    char *file_name = getenv("MSG_FICH");
-    if (file_name == NULL)
-    {
-        printf("[Error] Read file - Unable to get the file name from the environment variable.\n");
-        exit(EXIT_FAILURE);
-    }
-    fptr = fopen(file_name, "w");
-    if (fptr == NULL)
-    {
-        printf("[Error] Save file - Unable to save information.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    int new_topic_flag = 1;
-    char last_topic[TOPIC_MAX_SIZE];
-    for (int i = 0; i < pdata->current_topics; i++)
-    {
-        for (int j = 0; j < pdata->topic_list->persistent_msg_count; j++)
-        {
-            fprintf(fptr,
-                    "%s %s %c %s",
-                    pdata->topic_list[i].topic,
-                    pdata->topic_list[i].persist_msg[j].user,
-                    pdata->topic_list[i].persist_msg[j].time,
-                    pdata->topic_list[i].persist_msg[j].text);
-        }
-    }
-
-    fclose(fptr);
-    return;
-}
-
-void createFifo(char *fifo)
-{
-    // Checks if fifo exists
-    if (access(fifo, F_OK) == 0)
-    {
-        printf("[Error] Pipe is already open.\n");
-        exit(EXIT_FAILURE);
-    }
-    // creates it
-    if (mkfifo(fifo, 0660) == -1)
-    {
-        if (errno == EEXIST)
-            printf("[Warning] Named fifo already exists or the program is open.\n");
-        printf("[Error] Unable to open the named fifo.\n");
-        exit(EXIT_FAILURE);
-    }
-}
-*/

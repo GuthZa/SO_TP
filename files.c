@@ -17,15 +17,23 @@ void getFromFile(void *data)
         return;
     }
 
-    int msg_count = 0, topic_count = 0;
+    int msg_count = 0, topic_count = 0, firstLine = 1;
     char temp_topic[20];
     while (!feof(fptr))
     {
         fscanf(fptr, "%s", temp_topic);
-        if (!strcmp(temp_topic, pdata->topic_list[pdata->current_topics].topic))
-            topic_count++;
+        if (strcmp(temp_topic, pdata->topic_list[topic_count].topic) != 0)
+        {
+            if (!firstLine)
+                topic_count++;
+            else
+                firstLine = 0;
+            strcpy(pdata->topic_list[topic_count].topic, temp_topic);
+            msg_count = 0;
+        }
 
-        strcpy(pdata->topic_list[topic_count].topic, temp_topic);
+        strcpy(pdata->topic_list[topic_count].persist_msg[msg_count].topic, temp_topic);
+
         //! Do NOT remove the last space from the formatter
         // it "removes" the first space from the msg
         fscanf(fptr, "%s %d ",
@@ -42,11 +50,11 @@ void getFromFile(void *data)
               MSG_MAX_SIZE, fptr);
 
         REMOVE_TRAILING_ENTER(pdata->topic_list[topic_count].persist_msg[msg_count].text);
-        msg_count++;
+        pdata->topic_list[topic_count].persistent_msg_count = ++msg_count;
     }
 
-    pdata->current_topics = topic_count;
-    pdata->topic_list->persistent_msg_count = msg_count;
+    pdata->current_topics = topic_count + 1;
+
     fclose(fptr);
     return;
 }
@@ -68,18 +76,24 @@ void saveToFile(void *data)
         exit(EXIT_FAILURE);
     }
 
-    int new_topic_flag = 1;
-    char last_topic[TOPIC_MAX_SIZE];
     for (int i = 0; i < pdata->current_topics; i++)
     {
-        for (int j = 0; j < pdata->topic_list->persistent_msg_count; j++)
+        for (int j = 0; j < pdata->topic_list[i].persistent_msg_count; j++)
         {
-            fprintf(fptr,
-                    "%s %s %c %s",
-                    pdata->topic_list[i].topic,
-                    pdata->topic_list[i].persist_msg[j].user,
-                    pdata->topic_list[i].persist_msg[j].time,
-                    pdata->topic_list[i].persist_msg[j].text);
+            if (i < pdata->current_topics - 1)
+                fprintf(fptr,
+                        "%s %s %d %s\n",
+                        pdata->topic_list[i].persist_msg[j].topic,
+                        pdata->topic_list[i].persist_msg[j].user,
+                        pdata->topic_list[i].persist_msg[j].time,
+                        pdata->topic_list[i].persist_msg[j].text);
+            else
+                fprintf(fptr,
+                        "%s %s %d %s",
+                        pdata->topic_list[i].persist_msg[j].topic,
+                        pdata->topic_list[i].persist_msg[j].user,
+                        pdata->topic_list[i].persist_msg[j].time,
+                        pdata->topic_list[i].persist_msg[j].text);
         }
     }
 
