@@ -156,14 +156,12 @@ void *handleFifoCommunication(void *data)
             closeService(error_msg, data);
         }
 
-        printf("%d", size);
-
         if (size > 0 && read(fd_feed, &resp, size) > 0)
         {
             REMOVE_TRAILING_ENTER(resp.text);
             printf("%s: %s %s\n", resp.user, resp.topic, resp.text);
-            if (strcmp(resp.topic, "WARNING") == 0)
-                closeService(resp.text, data);
+            if (strcmp(resp.topic, "Warning") == 0)
+                closeService(".", data);
         }
 
     } while (!pdata->stop);

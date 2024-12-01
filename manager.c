@@ -123,6 +123,7 @@ void *handleFifoCommunication(void *data)
                 printf("[Warning] Nothing was read from the pipe - Login\n");
 
             acceptUsers(data, user);
+            printf("Accepted the user");
             break;
         case LOGOUT:
             size = read(fd_manager, &user, sizeof(userData));
@@ -175,6 +176,7 @@ void acceptUsers(void *data, userData user)
     pthread_mutex_lock(pdata->m);
     if (pdata->current_users >= MAX_USERS)
     {
+        pthread_mutex_unlock(pdata->m);
         strcpy(msg.text, "We have reached the maximum users available. Please try again later.");
         strcpy(msg.topic, "Warning");
         strcpy(msg.user, "[Server]");
@@ -187,6 +189,7 @@ void acceptUsers(void *data, userData user)
     {
         if (strcmp(pdata->user_list[j].name, user.name) == 0)
         {
+            pthread_mutex_unlock(pdata->m);
             strcpy(msg.text, "There's already a user using the chosen username.");
             strcpy(msg.topic, "Warning");
             strcpy(msg.user, "[Server]");
@@ -280,10 +283,9 @@ void logoutUser(void *data, int pid)
         }
     }
 
-    for (int j = 0; j < pdata->current_users; j++)
-    {
-        printf("User logged in: %s\n", pdata->user_list[j].name);
-    }
+    //! TO REMOVE, will clutter the manager screen
+    // Is only for the information while developing
+    printf("[INFO] User logged out\n");
     pthread_mutex_unlock(pdata->m);
     return;
 }
