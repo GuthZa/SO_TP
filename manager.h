@@ -56,3 +56,15 @@ void getFromFile(void *data);
 void saveToFile(void *data);
 
 void *updateMessageCounter(void *data);
+
+void *receiveAdminInput(void *data);
+/**
+ * @param msg Log message to be used
+ * @param fifo Pointer to the name of the fifo
+ * @param data TDATA
+ *
+ * @remark Use "." to send no message
+ *
+ * @note Terminates the program
+ */
+void closeService(char *msg, char *fifo, void *data);

@@ -116,17 +116,7 @@ typedef struct
     char topic[TOPIC_MAX_SIZE];
 } subscribe;
 
-/**
- * @param msg Log message to be used
- * @param fifo Pointer to the name of the fifo
- * @param fd1 File descriptor to close
- * @param fd1 File descriptor to close
- *
- * @remark Use "." to send no message
- *
- * @note Terminates the program
- */
-void closeService(char *msg, char *fifo, int fd1);
+
 
 /**
  * @param fifo Pointer to the name of the fifo

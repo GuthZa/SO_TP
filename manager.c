@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Unable to open the server pipe for reading - Setup\n",
                 errno);
-        closeService(error_msg, MANAGER_FIFO, data.fd_manager);
+        closeService(error_msg, MANAGER_FIFO, &data);
     }
 
     /* ================= START TIMER THREAD ================= */
@@ -46,7 +46,15 @@ int main(int argc, char *argv[])
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Thread setup failed. \n",
                 errno);
-        closeService(error_msg, MANAGER_FIFO, data.fd_manager);
+        closeService(error_msg, MANAGER_FIFO, &data);
+    }
+
+    if (pthread_create(&t[1], NULL, &receiveAdminInput, &data) != 0)
+    {
+        sprintf(error_msg,
+                "[Error] Code: {%d}\n Thread setup failed. \n",
+                errno);
+        closeService(error_msg, MANAGER_FIFO, &data);
     }
 
     /* =================== SERVICE START ===================== */
@@ -58,7 +66,7 @@ int main(int argc, char *argv[])
             sprintf(error_msg,
                     "[Error] Code: {%d}\n Unable to read from the server pipe - Type\n",
                     errno);
-            closeService(error_msg, MANAGER_FIFO, data.fd_manager);
+            closeService(error_msg, MANAGER_FIFO, &data);
         }
 
         switch (type)
@@ -103,6 +111,25 @@ int main(int argc, char *argv[])
     exit(EXIT_SUCCESS);
 }
 
+void *receiveAdminInput(void *data)
+{
+    TDATA *pdata = (TDATA *)data;
+    char msg[MSG_MAX_SIZE]; // to save admin input
+    do
+    {
+        printf("# ");
+        read(STDIN_FILENO, msg, MSG_MAX_SIZE);
+        REMOVE_TRAILING_ENTER(msg);
+
+        if (strcmp(msg, "exit") == 0)
+        {
+            signal_EndService(data);
+            closeService(".", MANAGER_FIFO, data);
+        }
+    } while (!pdata->stop);
+    pthread_exit(NULL);
+}
+
 void handle_closeService(int s, siginfo_t *i, void *v)
 {
     printf("Please type exit\n");
@@ -111,7 +138,7 @@ void handle_closeService(int s, siginfo_t *i, void *v)
     // It's only while it doesn't have threads
     // But we don't want the admin to be able to close the service with
     // Ctrl + C
-    closeService(".", MANAGER_FIFO, 0);
+    // closeService(".", MANAGER_FIFO, void);
 }
 
 /**
@@ -140,7 +167,7 @@ void acceptUsers(void *data)
                 "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
                 errno);
         saveToFile(data);
-        closeService(error_msg, MANAGER_FIFO, pdata->fd_manager);
+        closeService(error_msg, MANAGER_FIFO, data);
     }
     if (size == 0)
     {
@@ -216,7 +243,7 @@ void logoutUser(void *data)
                 "[Error] Code: {%d}\n Unable to read from the server pipe - Logout\n",
                 errno);
         saveToFile(data);
-        closeService(error_msg, MANAGER_FIFO, pdata->fd_manager);
+        closeService(error_msg, MANAGER_FIFO, data);
     }
     if (size == 0)
     {
@@ -290,7 +317,7 @@ void subscribeUser(void *data)
                 "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
                 errno);
         saveToFile(data);
-        closeService(error_msg, MANAGER_FIFO, pdata->fd_manager);
+        closeService(error_msg, MANAGER_FIFO, data);
     }
     if (size == 0)
     {
@@ -299,16 +326,22 @@ void subscribeUser(void *data)
     }
 }
 
-void closeService(char *msg, char *fifo, int fd1)
+void closeService(char *msg, char *fifo, void *data)
 {
+    TDATA *pdata = (TDATA *)data;
     if (strcmp(".", msg) != 0)
-        printf("%s", msg);
+        printf("%s\n", msg);
+    pdata->stop = 1;
+    printf("Stopping background processes...\n");
     if (pthread_join(t[0], NULL) == EDEADLK)
-        printf("[Warning] Deadlock closing the thread 0");
-    if (pthread_join(t[1], NULL) == EDEADLK)
-        printf("[Warning] Deadlock closing the thread 1");
+        printf("[Warning] Deadlock when closing the thread for the timer\n");
+    pthread_join(t[1], NULL);
+    //* this will always warn because I'm not using pthread_exit(NULL)
+    // if (pthread_join(t[1], NULL) == EDEADLK)
+    // printf("[Warning] Deadlock when closing the thread for input\n");
     pthread_mutex_destroy(&mutex);
-    close(fd1);
+    printf("Closing fifos...\n");
+    close(pdata->fd_manager);
     unlink(fifo);
-    exit(EXIT_FAILURE);
+    strcmp(msg, ".") == 0 ? exit(EXIT_SUCCESS) : exit(EXIT_FAILURE);
 }
