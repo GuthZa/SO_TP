@@ -87,7 +87,7 @@ typedef struct
  * @param msg_size int
  * @param msg string
  *
- * @note To send messages User -> Manager
+ * @remark To send messages User -> Manager
  */
 typedef struct
 {

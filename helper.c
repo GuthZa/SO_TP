@@ -17,3 +17,8 @@ void createFifo(char *fifo)
         exit(EXIT_FAILURE);
     }
 }
+
+void handle_closeService(int s, siginfo_t *i, void *v)
+{
+    printf("Please type exit\n");
+}

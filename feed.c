@@ -26,6 +26,7 @@ int main()
     // Thread
     pthread_mutex_init(&mutex, NULL); // inicializar a variavel mutex
     TDATA data;
+    data.m = &mutex;
     data.stop = 0;
 
     if (access(MANAGER_FIFO, F_OK) != 0)
@@ -77,9 +78,11 @@ int main()
         /* =============== CHECK COMMAND VALIDITY =================== */
         if (strcmp(argv[0], "exit") == 0)
         {
-            msg_struct.logIO.user = data.user;
+            pthread_mutex_lock(data.m);
+            memcpy(&msg_struct.logIO.user, &data.user, sizeof(userData));
             sendMessage(msg_struct, LOGOUT, &data);
-            exit(EXIT_SUCCESS);
+            pthread_mutex_unlock(data.m);
+            closeService(".", &data);
         }
         if (strcmp(argv[0], "msg") != 0)
         {
@@ -119,7 +122,8 @@ void *handleFifoCommunication(void *data)
 {
     char FEED_FIFO_FINAL[100];
     int fd_feed;
-    response resp;
+    int size;
+    msgData resp;
     msgStruct msg_struct;
     TDATA *pdata = (TDATA *)data;
 
@@ -129,7 +133,9 @@ void *handleFifoCommunication(void *data)
     sprintf(FEED_FIFO_FINAL, FEED_FIFO, getpid());
     createFifo(FEED_FIFO_FINAL);
 
+    pthread_mutex_lock(pdata->m);
     msg_struct.logIO.user = pdata->user;
+    pthread_mutex_unlock(pdata->m);
     sendMessage(msg_struct, LOGIN, data);
 
     if ((fd_feed = open(FEED_FIFO_FINAL, O_RDWR)) < 0)
@@ -138,26 +144,28 @@ void *handleFifoCommunication(void *data)
         closeService(error_msg, data);
     }
 
+    pthread_mutex_lock(pdata->m);
+    memcpy(&pdata->fd_feed, &fd_feed, sizeof(int));
+    pthread_mutex_unlock(pdata->m);
+
     do
     {
-        if (read(fd_feed, &resp.msg_size, sizeof(int)) < 0)
+        if (read(fd_feed, &size, sizeof(int)) <= 0)
         {
             strcpy(error_msg, "[Error] Unable to read from the server piped - Response\n");
             closeService(error_msg, data);
         }
 
-        printf("%d", resp.msg_size);
-        if (resp.msg_size > 0 &&
-            read(fd_feed, &resp, (resp.msg_size - sizeof(int))) <= 0)
+        printf("%d", size);
+
+        if (size > 0 && read(fd_feed, &resp, size) > 0)
         {
-            strcpy(error_msg, "[Error] Unable to read from the server piped - Response\n");
-            closeService(error_msg, data);
+            REMOVE_TRAILING_ENTER(resp.text);
+            printf("%s: %s %s\n", resp.user, resp.topic, resp.text);
+            if (strcmp(resp.topic, "WARNING") == 0)
+                closeService(resp.text, data);
         }
 
-        REMOVE_TRAILING_ENTER(resp.text);
-        printf("%s\n", resp.text);
-        if (strcmp(resp.topic, "WARNING") == 0)
-            closeService(resp.text, data);
     } while (!pdata->stop);
 
     close(fd_feed);
@@ -167,7 +175,6 @@ void *handleFifoCommunication(void *data)
 
 void sendMessage(msgStruct msg_struct, msgType type, void *data)
 {
-    TDATA *pdata = (TDATA *)data;
     int fd_manager;
     if ((fd_manager = open(MANAGER_FIFO, O_WRONLY)) == -1)
     {
@@ -188,7 +195,6 @@ void sendMessage(msgStruct msg_struct, msgType type, void *data)
         msg_struct.logIO.type = type;
         if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
             closeService(error_msg, data);
-        closeService(".", data);
         break;
     case SUBSCRIBE:
         sprintf(error_msg, "[Error] {SUBSCRIBE}\n Unable to send message\n");
@@ -217,12 +223,6 @@ void sendMessage(msgStruct msg_struct, msgType type, void *data)
     return;
 }
 
-void handle_closeService(int s, siginfo_t *i, void *v)
-{
-    printf("Please type exit\n");
-    // closeService(".", FEED_FIFO_FINAL, 0);
-}
-
 void closeService(char *msg, void *data)
 {
     TDATA *pdata = (TDATA *)data;
@@ -233,9 +233,10 @@ void closeService(char *msg, void *data)
     pdata->stop = 1;
     int i = 0;
     // Unblocks the read
+    pthread_mutex_lock(pdata->m);
     write(pdata->fd_feed, &i, sizeof(int));
     if (pthread_join(t, NULL) == EDEADLK)
         printf("[Warning] Deadlock when closing the thread for the timer\n");
-
+    pthread_mutex_unlock(pdata->m);
     exit(EXIT_FAILURE);
 }

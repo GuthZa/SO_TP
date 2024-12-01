@@ -22,7 +22,7 @@ typedef struct
     int stop;
     int fd_feed;
     userData user;
-    pthread_mutex_t m;
+    pthread_mutex_t *m;
 } TDATA;
 
 /**
