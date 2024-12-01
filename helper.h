@@ -21,17 +21,7 @@
 
 #define MAX_USERS 10 // Max users
 
-char FEED_FIFO_FINAL[100];
-char error_msg[100];
-
 #define REMOVE_TRAILING_ENTER(str) str[strcspn(str, "\n")] = '\0'
-
-// Data struct for threads
-typedef struct
-{
-    int stop;
-    pthread_mutex_t *m;
-} TDATA;
 
 // Used to wrap each message
 typedef enum
@@ -58,14 +48,16 @@ typedef struct
 } userData;
 
 /**
- * @param time int
- * @param msg_size int
+ * @param time int in seconds
+ * @param topic char[TOPIC_MAX_SIZE]
  * @param text char[MSG_MAX_SIZE]
+ * @param user char[USER_MAX_SIZE]
  */
 typedef struct
 {
+    char topic[TOPIC_MAX_SIZE];
+    char user[USER_MAX_SIZE];
     int time; // Time until being deleted
-    int msg_size;
     char text[MSG_MAX_SIZE];
 } msgData;
 
@@ -80,33 +72,27 @@ typedef struct
 } login;
 
 /**
- * @param topic string
- * @param msg_size int
- * @param msg string
- *
- * @note To send messages Manager -> User
+ * @note Wrapper of message with the size
+ * @remark To send messages Manager -> User
  */
 typedef struct
 {
-    int msg_size;
-    char topic[TOPIC_MAX_SIZE];
-    char text[MSG_MAX_SIZE];
+    int size;
+    msgData message;
 } response;
 
 /**
  * @param type enum with message type
- * @param topic string
  * @param user userData
- * @param time int in seconds
  * @param msg_size int
  * @param msg string
  *
- * @note To send messages User -> Manager
+ * @remark To send messages User -> Manager
  */
 typedef struct
 {
     msgType type;
-    char topic[TOPIC_MAX_SIZE];
+    int msg_size;
     userData user;
     msgData msg;
 } message;
@@ -126,47 +112,11 @@ typedef struct
 } subscribe;
 
 /**
- * @param msg Log message to be used
- * @param fifo Pointer to the name of the fifo
- * @param fd1 File descriptor to close
- * @param fd1 File descriptor to close
- *
- * @remark Use "." to send no message
- *
- * @note Terminates the program
- */
-void closeService(char *msg, char *fifo, int fd1, int fd2)
-{
-    if (strcmp(".", msg) != 0)
-        printf("%s", msg);
-    close(fd1);
-    close(fd2);
-    unlink(fifo);
-    exit(EXIT_FAILURE);
-}
-
-/**
  * @param fifo Pointer to the name of the fifo
  *
  * @note Might terminate the program
  */
-void createFifo(char *fifo)
-{
-    // Checks if fifo exists
-    if (access(fifo, F_OK) == 0)
-    {
-        printf("[Error] Pipe is already open.\n");
-        exit(EXIT_FAILURE);
-    }
-    // creates it
-    if (mkfifo(fifo, 0660) == -1)
-    {
-        if (errno == EEXIST)
-            printf("[Warning] Named fifo already exists or the program is open.\n");
-        printf("[Error] Unable to open the named fifo.\n");
-        exit(EXIT_FAILURE);
-    }
-}
+void createFifo(char *fifo);
 
 /**
  * @note overrides the Ctrl + C signal base

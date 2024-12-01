@@ -1,39 +1,12 @@
-#include "helper.h"
-#define MAX_PERSIST_MSG 5
+#include "manager.h"
 
-/**
- * @param topic string
- * @param user pid_t
- *
- * @note Saves which users that subscribed a topic
- */
-typedef struct
-{
-    char topic[TOPIC_MAX_SIZE];
-    pid_t users[MAX_USERS];
-    int current_msgs;
-    msgData persist_msg[MAX_PERSIST_MSG];
-} topic;
-
-void acceptUsers(int fd, userData *user_list, int current_users);
-
-void sendResponse(const char *msg, const char *topic, int pid);
-
-void logoutUser(int fd, userData *user_list, int current_users);
-
-void signal_EndService(userData *user_list, int current_users);
-
-void subscribeUser(int fd, topic *topic_list, int current_topics);
+char error_msg[100];
+pthread_t t[2];
+pthread_mutex_t mutex; // criar a variavel mutex
 
 int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
-
-    msgType type;
-    userData user_list[MAX_USERS];
-    topic topic_list[TOPIC_MAX_SIZE];
-    int current_users = 0;
-    int current_topics = 0;
 
     // Signal to remove the pipe
     struct sigaction sa;
@@ -42,52 +15,44 @@ int main(int argc, char *argv[])
     sigaction(SIGINT, &sa, NULL);
 
     // Threads
-    pthread_mutex_t mutex;            // criar a variavel mutex
     pthread_mutex_init(&mutex, NULL); // inicializar a variavel mutex
-    pthread_t t[2];
+    TDATA data;
+    data.m = &mutex;
+    data.stop = 0;
+    data.current_users = 0;
+    data.current_topics = 0;
+    data.topic_list->persistent_msg_count = 0;
+    data.topic_list->subscribed_user_count = 0;
 
-    /* ================== SETUP THE PIPES m */
-    int fd_manager;
-    createFifo(MANAGER_FIFO);
+    /* ================= READ THE FILE ==================== */
+    getFromFile(&data);
 
-    if ((fd_manager = open(MANAGER_FIFO, O_RDWR)) == -1)
+    /* ================== START THREADS =================== */
+    if (pthread_create(&t[0], NULL, &updateMessageCounter, &data) != 0)
     {
         sprintf(error_msg,
-                "[Error] Code: {%d}\n Unable to open the server pipe for reading - Setup\n",
+                "[Error] Code: {%d}\n Thread setup failed. \n",
                 errno);
-        printf(error_msg);
-        exit(EXIT_FAILURE);
+        closeService(error_msg, &data);
     }
 
-    /* ====================== SERVICE START ======================== */
+    if (pthread_create(&t[1], NULL, &handleFifoCommunication, &data) != 0)
+    {
+        sprintf(error_msg,
+                "[Error] Code: {%d}\n Thread setup failed. \n",
+                errno);
+        closeService(error_msg, &data);
+    }
+
+    /* =================== SERVICE START ===================== */
+    char msg[MSG_MAX_SIZE]; // to save admin input
     do
     {
-        if (read(fd_manager, &type, sizeof(msgType)) < 0)
-        {
-            signal_EndService(user_list, current_users);
-            sprintf(error_msg,
-                    "[Error] Code: {%d}\n Unable to read from the server pipe - Type\n",
-                    errno);
-            closeService(error_msg, MANAGER_FIFO, fd_manager, 0);
-        }
+        read(STDIN_FILENO, msg, MSG_MAX_SIZE);
+        REMOVE_TRAILING_ENTER(msg);
 
-        switch (type)
-        {
-        case LOGIN:
-            acceptUsers(fd_manager, user_list, current_users);
-            break;
-        case LOGOUT:
-            logoutUser(fd_manager, user_list, current_users);
-            break;
-        case SUBSCRIBE:
-
-            break;
-        case MESSAGE:
-            break;
-        case LIST:
-            break;
-        }
-        type = -1;
+        if (strcmp(msg, "exit") == 0)
+            closeService(".", &data);
 
         // /* ======== CHECK FOR MAX TOPICS AND DUPLICATE TOPICS ======= */
         // // Receive topic from user
@@ -113,74 +78,134 @@ int main(int argc, char *argv[])
     exit(EXIT_SUCCESS);
 }
 
-void handle_closeService(int s, siginfo_t *i, void *v)
+void *handleFifoCommunication(void *data)
 {
-    printf("Please type exit\n");
-    // kill(getpid(), SIGINT);
-    // TODO Don't forget to remove this
-    // It's only while it doesn't have threads
-    // But we don't want the admin to be able to close the service with
-    // Ctrl + C
-    closeService(".", MANAGER_FIFO, 0, 1);
+    msgType type;
+    TDATA *pdata = (TDATA *)data;
+    int fd_manager, size;
+    userData user;
+
+    /* ================== SETUP THE PIPES ================== */
+    createFifo(MANAGER_FIFO);
+    if ((fd_manager = open(MANAGER_FIFO, O_RDWR)) == -1)
+    {
+        sprintf(error_msg,
+                "[Error] Code: {%d}\n Unable to open the server pipe for reading - Setup\n",
+                errno);
+        closeService(error_msg, data);
+    }
+
+    pthread_mutex_lock(pdata->m);
+    pdata->fd_manager = fd_manager;
+    pthread_mutex_unlock(pdata->m);
+
+    do
+    {
+        if (read(fd_manager, &type, sizeof(msgType)) < 0)
+        {
+            sprintf(error_msg,
+                    "[Error] Code: {%d}\n Unable to read from the server pipe - Type\n",
+                    errno);
+            closeService(error_msg, data);
+        }
+        switch (type)
+        {
+        case LOGIN:
+            size = read(fd_manager, &user, sizeof(userData));
+            if (size < 0)
+            {
+                sprintf(error_msg,
+                        "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
+                        errno);
+                closeService(error_msg, data);
+            }
+            if (size == 0)
+                printf("[Warning] Nothing was read from the pipe - Login\n");
+
+            acceptUsers(data, user);
+            printf("Accepted the user");
+            break;
+        case LOGOUT:
+            size = read(fd_manager, &user, sizeof(userData));
+            if (size < 0)
+            {
+                sprintf(error_msg,
+                        "[Error] Code: {%d}\n Unable to read from the server pipe - Logout\n",
+                        errno);
+                closeService(error_msg, data);
+            }
+            if (size == 0)
+                printf("[Warning] Nothing was read from the pipe - Logout\n");
+
+            logoutUser(data, user.pid);
+            break;
+        case SUBSCRIBE:
+
+            break;
+        case MESSAGE:
+            break;
+        case LIST:
+            break;
+        default:
+            type = -1;
+        }
+        type = -1;
+    } while (!pdata->stop);
+
+    close(fd_manager);
+    unlink(MANAGER_FIFO);
+    pthread_exit(NULL);
 }
 
-/**
- * @param user_list
- * @param current_users int size of user_list
- *
- * @note Sends a signal to all users that the manager is closing
- */
-void signal_EndService(userData *user_list, int current_users)
+void signal_EndService(void *data)
 {
+    TDATA *pdata = (TDATA *)data;
     union sigval val;
     val.sival_int = -1;
-    for (int i = 0; i < current_users; i++)
-        sigqueue(user_list[i].pid, SIGUSR2, val);
+    pthread_mutex_lock(pdata->m);
+    for (int j = 0; j < pdata->current_users; j++)
+        sigqueue(pdata->user_list[j].pid, SIGUSR2, val);
+    pthread_mutex_unlock(pdata->m);
 }
 
-void acceptUsers(int fd, userData *user_list, int current_users)
+void acceptUsers(void *data, userData user)
 {
-    userData user;
-    response resp;
-    char tmp_str[MSG_MAX_SIZE];
+    TDATA *pdata = (TDATA *)data;
+    msgData msg;
 
-    int size = read(fd, &user, sizeof(userData));
-    if (size < 0)
+    pthread_mutex_lock(pdata->m);
+    if (pdata->current_users >= MAX_USERS)
     {
-        signal_EndService(user_list, current_users);
-        sprintf(error_msg,
-                "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
-                errno);
-        closeService(error_msg, MANAGER_FIFO, fd, 0);
-    }
-    if (size == 0)
-    {
-        //? Maybe send signal to user
-        printf("[Warning] Nothing was read from the pipe - Login\n");
+        pthread_mutex_unlock(pdata->m);
+        strcpy(msg.text, "We have reached the maximum users available. Please try again later.");
+        strcpy(msg.topic, "Warning");
+        strcpy(msg.user, "[Server]");
+        msg.time = 0;
+        sendResponse(msg, user.pid);
         return;
     }
 
-    if (current_users >= MAX_USERS)
+    for (int j = 0; j < pdata->current_users; j++)
     {
-        strcpy(tmp_str, "<SERV> We have reached the maximum users available. Sorry, please try again later.\n");
-        sendResponse(tmp_str, "WARNING", user.pid);
-        return;
-    }
-
-    for (int i = 0; i < current_users; i++)
-    {
-        if (strcmp(user_list[i].name, user.name) == 0)
+        if (strcmp(pdata->user_list[j].name, user.name) == 0)
         {
-            sprintf(tmp_str,
-                    "<SERV> There's already a user using the username {%s}, please choose another.\n",
-                    user.name);
-            sendResponse(tmp_str, "WARNING", user.pid);
+            pthread_mutex_unlock(pdata->m);
+            strcpy(msg.text, "There's already a user using the chosen username.");
+            strcpy(msg.topic, "Warning");
+            strcpy(msg.user, "[Server]");
+            msg.time = 0;
+            sendResponse(msg, user.pid);
             return;
         }
     }
+    sprintf(msg.text, "{%s}!\n", user.name);
+    strcpy(msg.topic, "Welcome");
+    strcpy(msg.user, "[Server]");
+    msg.time = 0;
 
-    sprintf(tmp_str, "<SERV> Welcome {%s}!\n", user.name);
-    sendResponse(tmp_str, "WELCOME", user.pid);
+    if (sendResponse(msg, user.pid))
+        pdata->user_list[pdata->current_users++] = user;
+    pthread_mutex_unlock(pdata->m);
 
     //! TO REMOVE, will clutter the manager screen
     // Is only for the information while developing
@@ -188,99 +213,266 @@ void acceptUsers(int fd, userData *user_list, int current_users)
     return;
 }
 
-/**
- * @param msg string to send
- * @param topic string with the topic in case
- * @param pid pid_t user to answer
- *
- * @note it automatically calculates the correct message size
- */
-void sendResponse(const char *msg, const char *topic, int pid)
+int sendResponse(msgData msg, int pid)
 {
+    char FEED_FIFO_FINAL[100];
     sprintf(FEED_FIFO_FINAL, FEED_FIFO, pid);
     int fd = open(FEED_FIFO_FINAL, O_WRONLY);
+    if (fd == -1)
+    {
+        printf("[Error %d]\n Unable to open the feed pipe to answer.\n", errno);
+        return 0;
+    }
     response resp;
 
     // To account for '\0'
-    resp.msg_size = strlen(msg) + 1;
-    strcpy(resp.text, msg);
-    strcpy(resp.topic, topic);
-
-    int response_size = resp.msg_size + sizeof(resp.topic) + sizeof(int);
+    resp.size = TOPIC_MAX_SIZE + USER_MAX_SIZE + sizeof(int) + strlen(msg.text) + 1;
+    resp.message = msg;
     // If there's an error sending OK to login, we discard the login attempt
-    if (write(fd, &resp, response_size) <= 0)
+    if (write(fd, &resp, resp.size + sizeof(int)) <= 0)
+    {
         printf("[Warning] Unable to respond to the client.\n");
+        return 0;
+    }
 
     close(fd);
-    return;
+    return 1;
 }
 
-/**
- * @param fd to receive from
- * @param user_list the array with all users
- * @param current_users int
- */
-void logoutUser(int fd, userData *user_list, int current_users)
+void logoutUser(void *data, int pid)
 {
-    userData user;
-    int size = read(fd, &user, sizeof(userData));
-    if (size < 0)
-    {
-        signal_EndService(user_list, current_users);
-        sprintf(error_msg,
-                "[Error] Code: {%d}\n Unable to read from the server pipe - Logout\n",
-                errno);
-        closeService(error_msg, MANAGER_FIFO, fd, 0);
-    }
-    if (size == 0)
-    {
-        printf("[Warning] Nothing was read from the pipe - Logout\n");
-        return;
-    }
+    TDATA *pdata = (TDATA *)data;
 
-    int isLoggedIn = 0;
-    for (int j = 0; j < current_users; j++)
+    pthread_mutex_lock(pdata->m);
+    // Removes the user from the logged list
+    for (int j = 0; j < pdata->current_users; j++)
     {
-        if (user_list[j].pid == user.pid)
+        if (pdata->user_list[j].pid == pid)
         {
-            if (j < current_users - 1)
-                user_list[j] = user_list[j++];
-            if (j == current_users - 1)
-                memset(&user_list[j], 0, sizeof(userData));
+            // Its not the last user of the array
+            if (j < pdata->current_users - 1)
+                memcpy(&pdata->user_list[j],
+                       &pdata->user_list[j + 1],
+                       sizeof(userData));
+            // Its the last user
+            if (j == pdata->current_users - 1)
+                memset(&pdata->user_list[j], 0, sizeof(userData));
         }
     }
-    current_users--;
+    pdata->current_users--;
 
-    for (int j = 0; j < current_users; j++)
+    for (int i = 0; i < pdata->current_topics; i++)
     {
-        printf("User logged in: %s\n", user_list[j]);
+        for (int j = 0; j < pdata->topic_list[i].subscribed_user_count; j++)
+        {
+            if (pdata->topic_list[i].subscribed_users[j].pid == pid)
+            {
+                // Its not the last user of the array
+                if (j < pdata->topic_list[i].subscribed_user_count - 1)
+                    memcpy(&pdata->topic_list[i].subscribed_users[j],
+                           &pdata->topic_list[i].subscribed_users[j + 1],
+                           sizeof(userData));
+                // Its the last user
+                if (j == pdata->current_users - 1)
+                {
+                    memset(&pdata->topic_list[i].subscribed_users[j],
+                           0, sizeof(userData));
+                    pdata->topic_list[i].subscribed_user_count--;
+                }
+            }
+        }
     }
+
+    //! TO REMOVE, will clutter the manager screen
+    // Is only for the information while developing
+    printf("[INFO] User logged out\n");
+    pthread_mutex_unlock(pdata->m);
     return;
 }
 
-/**
- *
- */
-// void *updateMessageCounter()
-// {
-//     for (int i = 0; i <)
-// }
-
-void subscribeUser(int fd, topic *topic_list, int current_topics)
+void *updateMessageCounter(void *data)
 {
-    userData user;
-    char *topic_name;
-    int size = read(fd, &user, sizeof(userData));
-    if (size < 0)
+    TDATA *pdata = (TDATA *)data;
+    do
     {
-        sprintf(error_msg,
-                "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
-                errno);
-        closeService(error_msg, MANAGER_FIFO, fd, 0);
+        pthread_mutex_lock(pdata->m);
+        // for (int j = 0; j < pdata->current_topics; j++)
+        // {
+        //     for (int i = 0; i < pdata->topic_list[j].persistent_msg_count; i++)
+        //     {
+        //         if (--pdata->topic_list[j].persist_msg[i].time == 0)
+        //         {
+        //             printf("j = %d, i = %d, time = %d\n",
+        //                    i, j, pdata->topic_list[j].persist_msg[i].time);
+        //             // Its not the last message in the array
+        //             if (i < pdata->topic_list[j].persistent_msg_count - 1)
+        //                 memcpy(&pdata->topic_list[j].persist_msg[i],
+        //                        &pdata->topic_list[j].persist_msg[i + 1],
+        //                        sizeof(msgData));
+        //             // Its the last message
+        //             if (i == pdata->topic_list[j].persistent_msg_count - 1)
+        //                 memset(&pdata->topic_list[j].persist_msg[i], 0, sizeof(msgData));
+        //         }
+        //     }
+        // }
+        pthread_mutex_unlock(pdata->m);
+        sleep(1);
+    } while (!pdata->stop);
+    pthread_exit(NULL);
+}
+
+void subscribeUser(void *data)
+{
+    TDATA *pdata = (TDATA *)data;
+    // userData user;
+    // char *topic_name;
+    // int size = read(pdata->fd_manager, &user, sizeof(userData));
+    // if (size < 0)
+    // {
+    //     signal_EndService(data);
+    //     sprintf(error_msg,
+    //             "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
+    //             errno);
+    //     saveToFile(data);
+    //     closeService(error_msg, data);
+    // }
+    // if (size == 0)
+    // {
+    //     printf("[Warning] Nothing was read from the pipe - Login\n");
+    //     return;
+    // }
+}
+
+void closeService(char *msg, void *data)
+{
+    TDATA *pdata = (TDATA *)data;
+    if (strcmp(".", msg) != 0)
+        printf("%s\n", msg);
+
+    printf("Signaling users end of service...\n");
+    signal_EndService(data);
+
+    printf("Saving data to file...\n");
+    saveToFile(data);
+
+    printf("Stopping background processes...\n");
+    pdata->stop = 1;
+    msgType type = -1;
+    // Unblocks the read
+    write(pdata->fd_manager, &type, sizeof(msgType));
+    if (pthread_join(t[0], NULL) == EDEADLK)
+        printf("[Warning] Deadlock when closing the thread for the timer\n");
+    if (pthread_join(t[1], NULL) == EDEADLK)
+        printf("[Warning] Deadlock when closing the thread for input\n");
+    pthread_mutex_destroy(&mutex);
+
+    strcmp(msg, ".") == 0 ? exit(EXIT_SUCCESS) : exit(EXIT_FAILURE);
+}
+
+//! to remove
+/*
+void getFromFile(void *data)
+{
+    FILE *fptr;
+    TDATA *pdata = (TDATA *)data;
+    char *file_name = getenv("MSG_FICH");
+    if (file_name == NULL)
+    {
+        printf("[Error] Read file - Unable to get the file name from the environment variable.\n");
+        exit(EXIT_FAILURE);
     }
-    if (size == 0)
+    fptr = fopen(file_name, "r");
+    if (fptr == NULL)
     {
-        printf("[Warning] Nothing was read from the pipe - Login\n");
+        printf("[Warning] Read file - File does not exist, no information read.\n");
         return;
     }
+
+    int msg_count = 0, topic_count = 0;
+    char temp_topic[20];
+    while (!feof(fptr))
+    {
+        fscanf(fptr, "%s", temp_topic);
+        if (!strcmp(temp_topic, pdata->topic_list[pdata->current_topics].topic))
+            topic_count++;
+
+        strcpy(pdata->topic_list[topic_count].topic, temp_topic);
+        //! Do NOT remove the last space from the formatter
+        // it "removes" the first space from the msg
+        fscanf(fptr, "%s %d ",
+               pdata->topic_list[topic_count]
+                   .persist_msg[msg_count]
+                   .user,
+               &pdata->topic_list[topic_count]
+                    .persist_msg[msg_count]
+                    .time);
+
+        fgets(pdata->topic_list[topic_count]
+                  .persist_msg[msg_count]
+                  .text,
+              MSG_MAX_SIZE, fptr);
+
+        REMOVE_TRAILING_ENTER(pdata->topic_list[topic_count].persist_msg[msg_count].text);
+        msg_count++;
+    }
+
+    pdata->current_topics = topic_count;
+    pdata->topic_list->persistent_msg_count = msg_count;
+    fclose(fptr);
+    return;
 }
+
+void saveToFile(void *data)
+{
+    FILE *fptr;
+    TDATA *pdata = (TDATA *)data;
+    char *file_name = getenv("MSG_FICH");
+    if (file_name == NULL)
+    {
+        printf("[Error] Read file - Unable to get the file name from the environment variable.\n");
+        exit(EXIT_FAILURE);
+    }
+    fptr = fopen(file_name, "w");
+    if (fptr == NULL)
+    {
+        printf("[Error] Save file - Unable to save information.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    int new_topic_flag = 1;
+    char last_topic[TOPIC_MAX_SIZE];
+    for (int i = 0; i < pdata->current_topics; i++)
+    {
+        for (int j = 0; j < pdata->topic_list->persistent_msg_count; j++)
+        {
+            fprintf(fptr,
+                    "%s %s %c %s",
+                    pdata->topic_list[i].topic,
+                    pdata->topic_list[i].persist_msg[j].user,
+                    pdata->topic_list[i].persist_msg[j].time,
+                    pdata->topic_list[i].persist_msg[j].text);
+        }
+    }
+
+    fclose(fptr);
+    return;
+}
+
+void createFifo(char *fifo)
+{
+    // Checks if fifo exists
+    if (access(fifo, F_OK) == 0)
+    {
+        printf("[Error] Pipe is already open.\n");
+        exit(EXIT_FAILURE);
+    }
+    // creates it
+    if (mkfifo(fifo, 0660) == -1)
+    {
+        if (errno == EEXIST)
+            printf("[Warning] Named fifo already exists or the program is open.\n");
+        printf("[Error] Unable to open the named fifo.\n");
+        exit(EXIT_FAILURE);
+    }
+}
+*/
