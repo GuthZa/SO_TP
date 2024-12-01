@@ -17,12 +17,3 @@ void createFifo(char *fifo)
         exit(EXIT_FAILURE);
     }
 }
-
-void closeService(char *msg, char *fifo, int fd1)
-{
-    if (strcmp(".", msg) != 0)
-        printf("%s", msg);
-    close(fd1);
-    unlink(fifo);
-    exit(EXIT_FAILURE);
-}

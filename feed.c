@@ -207,3 +207,12 @@ void handle_closeService(int s, siginfo_t *i, void *v)
     // kill(getpid(), SIGINT);
     closeService(".", FEED_FIFO_FINAL, 0);
 }
+
+void closeService(char *msg, char *fifo, int fd1)
+{
+    if (strcmp(".", msg) != 0)
+        printf("%s", msg);
+    close(fd1);
+    unlink(fifo);
+    exit(EXIT_FAILURE);
+}
