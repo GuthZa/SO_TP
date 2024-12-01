@@ -13,8 +13,8 @@ void getFromFile(void *data)
     fptr = fopen(file_name, "r");
     if (fptr == NULL)
     {
-        printf("[Error] Read file - Unable to read information.\n");
-        exit(EXIT_FAILURE);
+        printf("[Warning] Read file - File does not exist, no information read.\n");
+        return;
     }
 
     int msg_count = 0, topic_count = 0;
@@ -46,7 +46,7 @@ void getFromFile(void *data)
     }
 
     pdata->current_topics = topic_count;
-    pdata->topic_list->current_msgs = msg_count;
+    pdata->topic_list->persistent_msg_count = msg_count;
     fclose(fptr);
     return;
 }
@@ -72,7 +72,7 @@ void saveToFile(void *data)
     char last_topic[TOPIC_MAX_SIZE];
     for (int i = 0; i < pdata->current_topics; i++)
     {
-        for (int j = 0; j < pdata->topic_list->current_msgs; j++)
+        for (int j = 0; j < pdata->topic_list->persistent_msg_count; j++)
         {
             fprintf(fptr,
                     "%s %s %c %s",

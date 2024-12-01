@@ -4,16 +4,19 @@
 
 /**
  * @param topic string
+ * @param subscribed_user_count int
  * @param user pid_t
+ * @param persistent_msg_count int
+ * @param persist_msg msgData
  *
  * @note Saves which users that subscribed a topic
  */
 typedef struct
 {
     char topic[TOPIC_MAX_SIZE];
+    int subscribed_user_count;
     pid_t users[MAX_USERS];
-    int current_msgs;
-    int current_user;
+    int persistent_msg_count;
     msgData persist_msg[MAX_PERSIST_MSG];
 } topic;
 
@@ -51,3 +54,5 @@ void subscribeUser(void *data);
 void getFromFile(void *data);
 
 void saveToFile(void *data);
+
+void *updateMessageCounter(void *data);
