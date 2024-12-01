@@ -1,7 +1,8 @@
 #include "feed.h"
 
-char FEED_FIFO_FINAL[100];
 char error_msg[100];
+pthread_t t;
+pthread_mutex_t mutex; // criar a variavel mutex
 
 int main()
 {
@@ -9,7 +10,6 @@ int main()
     // Instead of waiting to fill the buffer
     setbuf(stdout, NULL);
 
-    userData user;
     msgType type;
     msgStruct msg_struct;
     char message[MSG_MAX_SIZE];
@@ -24,9 +24,9 @@ int main()
     sigaction(SIGINT, &sa, NULL);
 
     // Thread
-    pthread_mutex_t mutex;            // criar a variavel mutex
     pthread_mutex_init(&mutex, NULL); // inicializar a variavel mutex
-    pthread_t t;
+    TDATA data;
+    data.stop = 0;
 
     if (access(MANAGER_FIFO, F_OK) != 0)
     {
@@ -38,31 +38,27 @@ int main()
     printf("\nHello user!\n\nPlease enter your username: ");
     read(STDIN_FILENO, message, USER_MAX_SIZE);
 
+    //! VERIFY USERNAME WITH NO SPACES
+
     REMOVE_TRAILING_ENTER(message);
     if (strcmp(message, "exit") == 0)
-    {
-        printf("\nGoodbye\n");
         exit(EXIT_SUCCESS);
-    }
 
     // Fill data from user
-    strcpy(user.name, message);
-    user.pid = getpid();
+    strcpy(data.user.name, message);
+    data.user.pid = getpid();
 
-    /* =============== SETUP THE PIPES & LOGIN ===================== */
-
-    // Checks there's a pipe with the same pid or creates one
-    sprintf(FEED_FIFO_FINAL, FEED_FIFO, getpid());
-    createFifo(FEED_FIFO_FINAL);
-
-    msg_struct.logIO.user = user;
-    // Login
-    sendMessage(msg_struct, LOGIN);
+    if (pthread_create(&t, NULL, &handleFifoCommunication, &data) != 0)
+    {
+        sprintf(error_msg,
+                "[Error] Code: {%d}\n Thread setup failed. \n",
+                errno);
+        closeService(error_msg, &data);
+    }
 
     /* ====================== SERVICE START ======================== */
     do
     {
-        printf("\n%s # ", user.name);
         read(STDIN_FILENO, message, MSG_MAX_SIZE);
 
         //! Is giving seg fault when only has \n as input
@@ -81,9 +77,8 @@ int main()
         /* =============== CHECK COMMAND VALIDITY =================== */
         if (strcmp(argv[0], "exit") == 0)
         {
-            msg_struct.logIO.user = user;
-            sendMessage(msg_struct, LOGOUT);
-            unlink(FEED_FIFO_FINAL);
+            msg_struct.logIO.user = data.user;
+            sendMessage(msg_struct, LOGOUT, &data);
             exit(EXIT_SUCCESS);
         }
         if (strcmp(argv[0], "msg") != 0)
@@ -91,6 +86,7 @@ int main()
         }
         else if (strcmp(argv[0], "subscribe") != 0)
         {
+            //! VERIFY TOPIC NO SPACES
             // msg_struct.subsIO.type = SUBSCRIBE;
             // msg_struct.subsIO.user = user;
             // //? Create string validation
@@ -119,15 +115,64 @@ int main()
     exit(EXIT_SUCCESS);
 }
 
-void sendMessage(msgStruct msg_struct, msgType type)
+void *handleFifoCommunication(void *data)
 {
-    int fd_manager, fd_feed;
+    char FEED_FIFO_FINAL[100];
+    int fd_feed;
     response resp;
+    msgStruct msg_struct;
+    TDATA *pdata = (TDATA *)data;
 
+    /* =============== SETUP THE PIPES & LOGIN ===================== */
+
+    // Checks there's a pipe with the same pid or creates one
+    sprintf(FEED_FIFO_FINAL, FEED_FIFO, getpid());
+    createFifo(FEED_FIFO_FINAL);
+
+    msg_struct.logIO.user = pdata->user;
+    sendMessage(msg_struct, LOGIN, data);
+
+    if ((fd_feed = open(FEED_FIFO_FINAL, O_RDWR)) < 0)
+    {
+        strcpy(error_msg, "[Error] Unable to open the server pipe for reading.\n");
+        closeService(error_msg, data);
+    }
+
+    do
+    {
+        if (read(fd_feed, &resp.msg_size, sizeof(int)) < 0)
+        {
+            strcpy(error_msg, "[Error] Unable to read from the server piped - Response\n");
+            closeService(error_msg, data);
+        }
+
+        printf("%d", resp.msg_size);
+        if (resp.msg_size > 0 &&
+            read(fd_feed, &resp, (resp.msg_size - sizeof(int))) <= 0)
+        {
+            strcpy(error_msg, "[Error] Unable to read from the server piped - Response\n");
+            closeService(error_msg, data);
+        }
+
+        REMOVE_TRAILING_ENTER(resp.text);
+        printf("%s\n", resp.text);
+        if (strcmp(resp.topic, "WARNING") == 0)
+            closeService(resp.text, data);
+    } while (!pdata->stop);
+
+    close(fd_feed);
+    unlink(FEED_FIFO_FINAL);
+    pthread_exit(NULL);
+}
+
+void sendMessage(msgStruct msg_struct, msgType type, void *data)
+{
+    TDATA *pdata = (TDATA *)data;
+    int fd_manager;
     if ((fd_manager = open(MANAGER_FIFO, O_WRONLY)) == -1)
     {
         sprintf(error_msg, "[Error %d]\n Unable to open the server pipe for reading.\n", errno);
-        closeService(error_msg, FEED_FIFO_FINAL, 0);
+        closeService(error_msg, 0);
     }
 
     switch (type)
@@ -136,83 +181,61 @@ void sendMessage(msgStruct msg_struct, msgType type)
         sprintf(error_msg, "[Error] {Login}\n Unable to send message\n");
         msg_struct.logIO.type = type;
         if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
-            closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
+            closeService(error_msg, data);
         break;
     case LOGOUT:
         sprintf(error_msg, "[Error] {LOGOUT}\n Unable to send message\n");
         msg_struct.logIO.type = type;
         if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
-            closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
-        closeService(".", FEED_FIFO_FINAL, fd_manager);
+            closeService(error_msg, data);
+        closeService(".", data);
         break;
     case SUBSCRIBE:
         sprintf(error_msg, "[Error] {SUBSCRIBE}\n Unable to send message\n");
         msg_struct.subsIO.type = type;
         if (write(fd_manager, &msg_struct.subsIO, sizeof(subscribe)) == -1)
-            closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
+            closeService(error_msg, data);
         break;
     case MESSAGE:
         sprintf(error_msg, "[Error] {MESSAGE}\n Unable to send message\n");
         msg_struct.msg.type = type;
         //! Calculate message size
         if (write(fd_manager, &msg_struct.msg, sizeof(message)) == -1)
-            closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
+            closeService(error_msg, data);
         break;
     case LIST:
         sprintf(error_msg, "[Error] {LIST}\n Unable to send message\n");
         msg_struct.subsIO.type = type;
         if (write(fd_manager, &msg_struct.subsIO, sizeof(subscribe)) == -1)
-            closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
+            closeService(error_msg, data);
         break;
     default:
         break;
     }
 
-    if ((fd_feed = open(FEED_FIFO_FINAL, O_RDONLY)) < 0)
-    {
-        strcpy(error_msg, "[Error] Unable to open the server pipe for reading.\n");
-        close(fd_feed);
-        closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
-    }
-
-    if (read(fd_feed, &resp.msg_size, sizeof(int)) <= 0 ||
-        read(fd_feed, &resp.topic, sizeof(resp.topic)) <= 0)
-    {
-        strcpy(error_msg, "[Error] Unable to read from the server piped - Response\n");
-        close(fd_feed);
-        closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
-    }
-
-    if (read(fd_feed, &resp.text, resp.msg_size) <= 0)
-    {
-        strcpy(error_msg, "[Error] Unable to read from the server pipe - Response\n");
-        close(fd_feed);
-        closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
-    }
-
-    printf("%s", resp.text);
-    if (strcmp(resp.topic, "WARNING") == 0)
-    {
-        strcpy(error_msg, "[WARNING] There was an error loggin in, please try again later.\n");
-        close(fd_feed);
-        closeService(error_msg, FEED_FIFO_FINAL, fd_manager);
-    }
-
+    close(fd_manager);
     return;
 }
 
 void handle_closeService(int s, siginfo_t *i, void *v)
 {
     printf("Please type exit\n");
-    // kill(getpid(), SIGINT);
-    closeService(".", FEED_FIFO_FINAL, 0);
+    // closeService(".", FEED_FIFO_FINAL, 0);
 }
 
-void closeService(char *msg, char *fifo, int fd1)
+void closeService(char *msg, void *data)
 {
+    TDATA *pdata = (TDATA *)data;
     if (strcmp(".", msg) != 0)
         printf("%s", msg);
-    close(fd1);
-    unlink(fifo);
+
+    printf("Stopping background processes...\n");
+    pdata->stop = 1;
+    int i = 0;
+    // Unblocks the read
+    write(pdata->fd_feed, &i, sizeof(int));
+    if (pthread_join(t, NULL) == EDEADLK)
+        printf("[Warning] Deadlock when closing the thread for the timer\n");
+
     exit(EXIT_FAILURE);
 }

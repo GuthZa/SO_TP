@@ -48,16 +48,17 @@ typedef struct
 } userData;
 
 /**
- * @param time int
- * @param msg_size int
+ * @param time int in seconds
+ * @param topic char[TOPIC_MAX_SIZE]
  * @param text char[MSG_MAX_SIZE]
+ * @param user char[USER_MAX_SIZE]
  */
 typedef struct
 {
-    int time; // Time until being deleted
-    int msg_size;
-    char text[MSG_MAX_SIZE];
+    char topic[TOPIC_MAX_SIZE];
     char user[USER_MAX_SIZE];
+    int time; // Time until being deleted
+    char text[MSG_MAX_SIZE];
 } msgData;
 
 /** Wrappper of userData to login
@@ -71,24 +72,18 @@ typedef struct
 } login;
 
 /**
- * @param topic string
- * @param msg_size int
- * @param msg string
- *
- * @note To send messages Manager -> User
+ * @note Wrapper of message with the size
+ * @remark To send messages Manager -> User
  */
 typedef struct
 {
-    int msg_size;
-    char topic[TOPIC_MAX_SIZE];
-    char text[MSG_MAX_SIZE];
+    int size;
+    msgData message;
 } response;
 
 /**
  * @param type enum with message type
- * @param topic string
  * @param user userData
- * @param time int in seconds
  * @param msg_size int
  * @param msg string
  *
@@ -97,7 +92,7 @@ typedef struct
 typedef struct
 {
     msgType type;
-    char topic[TOPIC_MAX_SIZE];
+    int msg_size;
     userData user;
     msgData msg;
 } message;
@@ -115,8 +110,6 @@ typedef struct
     userData user;
     char topic[TOPIC_MAX_SIZE];
 } subscribe;
-
-
 
 /**
  * @param fifo Pointer to the name of the fifo

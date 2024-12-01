@@ -13,18 +13,17 @@
  */
 typedef struct
 {
-    char topic[TOPIC_MAX_SIZE];
+    char topic[TOPIC_MAX_SIZE]; //? we can check through persist_msg
     int subscribed_user_count;
-    pid_t users[MAX_USERS];
+    userData subscribed_users[MAX_USERS];
     int persistent_msg_count;
     msgData persist_msg[MAX_PERSIST_MSG];
 } topic;
 
 /**
  * @param stop int flag to terminate thread
+ * @param fd_manager int to be able to send exit message to thread
  * @param topic_list topic list of topics
- * @param user_list userData list of users
- * @param current_users int number of active users
  * @param current_topics int number of existing topics
  * @param m thread mutex
  *
@@ -35,18 +34,25 @@ typedef struct
     int stop;
     int fd_manager;
     topic topic_list[TOPIC_MAX_SIZE];
+    int current_topics;
     userData user_list[MAX_USERS];
     int current_users;
-    int current_topics;
     pthread_mutex_t *m;
 } TDATA;
 
-void acceptUsers(void *data);
+void acceptUsers(void *data, userData user);
 
-void sendResponse(const char *msg, const char *topic, int pid);
+/**
+ * @param msg msgData
+ * @param pid int user to send message
+ */
+int sendResponse(msgData msg, int pid);
 
-void logoutUser(void *data);
+void logoutUser(void *data, int pid);
 
+/**
+ * @note Sends a signal to all users that the manager is closing
+ */
 void signal_EndService(void *data);
 
 void subscribeUser(void *data);
@@ -60,11 +66,10 @@ void *updateMessageCounter(void *data);
 void *handleFifoCommunication(void *data);
 /**
  * @param msg Log message to be used
- * @param fifo Pointer to the name of the fifo
  * @param data TDATA
  *
  * @remark Use "." to send no message
  *
  * @note Terminates the program
  */
-void closeService(char *msg, char *fifo, void *data);
+void closeService(char *msg, void *data);

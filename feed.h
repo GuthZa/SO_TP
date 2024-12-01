@@ -17,11 +17,19 @@ typedef union
     message msg;
 } msgStruct;
 
+typedef struct
+{
+    int stop;
+    int fd_feed;
+    userData user;
+    pthread_mutex_t m;
+} TDATA;
+
 /**
  * @param msg_struct msgStruct
  *
  */
-void sendMessage(msgStruct login_form, msgType type);
+void sendMessage(msgStruct login_form, msgType type, void *data);
 
 /**
  * @param msg Log message to be used
@@ -32,4 +40,6 @@ void sendMessage(msgStruct login_form, msgType type);
  *
  * @note Terminates the program
  */
-void closeService(char *msg, char *fifo, int fd1);
+void closeService(char *msg, void *data);
+
+void *handleFifoCommunication(void *data);
