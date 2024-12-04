@@ -11,6 +11,10 @@
 #include <errno.h>
 #include <pthread.h>
 
+// There doesn't exist a world where the user might need more than
+// 5 words for a command on this program
+#define MAX_ARGS 5
+
 // paths for fifo files
 #define MANAGER_FIFO "fifos/manager_fifo"
 #define FEED_FIFO "fifos/feed_%d_fifo"

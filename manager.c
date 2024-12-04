@@ -1,12 +1,12 @@
 #include "manager.h"
 
-char error_msg[100];
 pthread_t t[2];
 pthread_mutex_t mutex; // criar a variavel mutex
 
-int main(int argc, char *argv[])
+int main()
 {
     setbuf(stdout, NULL);
+    char error_msg[100];
 
     // Signal to remove the pipe
     struct sigaction sa;
@@ -46,40 +46,183 @@ int main(int argc, char *argv[])
 
     /* =================== SERVICE START ===================== */
     char msg[MSG_MAX_SIZE]; // to save admin input
+    char *param, *token;
     do
     {
         read(STDIN_FILENO, msg, MSG_MAX_SIZE);
-        REMOVE_TRAILING_ENTER(msg);
+        //! Is giving seg fault when only has \n as input
+        msg[strcspn(msg, "\n")] = '\0';
+        // Divides the input of the user in multiple strings
+        // Similar to the way argv is handled
+        token = strtok(msg, " ");
+        if (token != NULL)
+            param = strtok(NULL, " ");
+        else
+            continue;
 
-        if (strcmp(msg, "exit") == 0)
+        if (strcmp(token, "close") == 0)
+        {
             closeService(".", &data);
+        }
+        else if (strcmp(token, "users") == 0)
+        {
+            pthread_mutex_lock(data.m);
+            if (data.current_users == 0)
+            {
+                printf("No users logged in.\n");
+                pthread_mutex_unlock(data.m);
+                continue;
+            }
+            printf("Current users:\n");
+            for (int i = 0; i < data.current_users; i++)
+                printf("%d: %s pid: %d\n", i, data.user_list[i].name, data.user_list[i].pid);
+            pthread_mutex_unlock(data.m);
+        }
+        else if (strcmp(token, "topics") == 0)
+        {
+            pthread_mutex_lock(data.m);
+            printf("Current topics:\n");
+            for (int i = 0; i < data.current_topics; i++)
+                printf("%d: %s with %d users subscribed.\n", i, data.topic_list[i].topic);
+            pthread_mutex_unlock(data.m);
+        }
+        else if (strcmp(token, "remove") == 0)
+        {
+            if (param == NULL)
+            {
+                printf("%s <username>\nPress help for available comands.", token);
+                continue;
+            }
+            checkUserExists(&data, param);
+        }
+        else if (strcmp(token, "show") == 0)
+        {
+            if (param == NULL)
+            {
+                printf("%s <topic>\nPress help for available comands.", token);
+                continue;
+            }
+            showTopic(&data, param);
+        }
+        else if (strcmp(token, "lock") == 0)
+        {
+            if (param == NULL)
+            {
+                printf("%s <topic>\nPress help for a list of available comands.", token);
+                continue;
+            }
+            lockTopic(&data, param);
+        }
+        else if (strcmp(token, "unlock") == 0)
+        {
+            if (param == NULL)
+            {
+                printf("%s <topic>\nPress help for a list of available commands.", token);
+                continue;
+            }
+            lockTopic(&data, param);
+        }
+        else if (strcmp(token, "help") == 0)
+        {
+            printf("users - for the list of currently active users.\n");
+            printf("remove <username> - to log out the user <username>.\n");
+            printf("topics - for the list of currently existing topics.\n");
+            printf("show <topic> - to see the persistant messages of <topic>.\n");
+            printf("lock <topic> - blocks the <topic> from receiving more messages.\n");
+            printf("unlock <topic> - reverse of lock");
+            printf("close - to exit and end the server.\n");
+        }
+        else
+        {
+            printf("Command unknown, press help for a list of available commands.\n");
+        }
 
-        // /* ======== CHECK FOR MAX TOPICS AND DUPLICATE TOPICS ======= */
-        // // Receive topic from user
-        // for (int i = 0; i < MAX_USERS; i++)
-        //     if (strcmp(topic_list[i]->topic, str) == 0)
-        //     {
-        //         topic_list[current_topics++];
-        //         printf("\nUser %s subscribed to the topic [%s].\n", user, topic);
-        //         break;
-        //     }
-        // if (current_topics >= TOPIC_MAX_SIZE)
-        // {
-        //     // Warns the user there's no room, that they should try later
-        //     printf("\nMax topics active reached\n");
-        // }
-        // else
-        // {
-        //     printf("\n New topic added, %s!\n", new_topic);
-        //     topic_list[current_topics++];
-        // }
     } while (1);
 
     exit(EXIT_SUCCESS);
 }
 
+void showTopic(void *data, char *topic)
+{
+    TDATA *pdata = (TDATA *)data;
+    pthread_mutex_lock(pdata->m);
+    for (int i = 0; i < pdata->current_topics; i++)
+    {
+        if (strcmp(pdata->topic_list[i].topic, topic) == 0)
+        {
+            for (int j = 0; j < pdata->topic_list[i].persistent_msg_count; j++)
+            {
+                printf("%d: From [%s] with %d time left\n \t%s\n", i,
+                       pdata->topic_list[i].persist_msg[j].user,
+                       pdata->topic_list[i].persist_msg[j].time,
+                       pdata->topic_list[i].persist_msg[j].text);
+            }
+            pthread_mutex_unlock(pdata->m);
+            return;
+        }
+    }
+    printf("No topic <%s> was found.\n", topic);
+    pthread_mutex_unlock(pdata->m);
+    return;
+}
+
+void unlockTopic(void *data, char *topic)
+{
+    TDATA *pdata = (TDATA *)data;
+    pthread_mutex_lock(pdata->m);
+    for (int i = 0; i < pdata->current_topics; i++)
+    {
+        if (strcmp(pdata->topic_list[i].topic, topic) == 0)
+        {
+            pdata->topic_list[i].is_topic_locked = 0;
+            pthread_mutex_unlock(pdata->m);
+            return;
+        }
+    }
+    printf("No topic <%s> was found.\n", topic);
+    pthread_mutex_unlock(pdata->m);
+    return;
+}
+
+void lockTopic(void *data, char *topic)
+{
+    TDATA *pdata = (TDATA *)data;
+    pthread_mutex_lock(pdata->m);
+    for (int i = 0; i < pdata->current_topics; i++)
+    {
+        if (strcmp(pdata->topic_list[i].topic, topic) == 0)
+        {
+            pdata->topic_list[i].is_topic_locked = 1;
+            pthread_mutex_unlock(pdata->m);
+            return;
+        }
+    }
+    printf("No topic <%s> was found.\n", topic);
+    pthread_mutex_unlock(pdata->m);
+    return;
+}
+
+void checkUserExists(void *data, char *user)
+{
+    TDATA *pdata = (TDATA *)data;
+    pthread_mutex_lock(pdata->m);
+    for (int i = 0; i < pdata->current_users; i++)
+    {
+        if (strcmp(pdata->user_list[i].name, user) == 0)
+        {
+            pthread_mutex_unlock(pdata->m);
+            logoutUser(data, pdata->user_list[i].pid);
+            return;
+        }
+    }
+    printf("No user with the username [%d] found.\n", user);
+    pthread_mutex_unlock(pdata->m);
+    return;
+}
+
 void *handleFifoCommunication(void *data)
 {
+    char error_msg[100];
     msgType type;
     TDATA *pdata = (TDATA *)data;
     int fd_manager, size;
@@ -139,7 +282,32 @@ void *handleFifoCommunication(void *data)
             logoutUser(data, user.pid);
             break;
         case SUBSCRIBE:
-
+            userData user;
+            char topic_name[TOPIC_MAX_SIZE];
+            int size = read(pdata->fd_manager, &user, sizeof(userData));
+            if (size < 0)
+            {
+                sprintf(error_msg,
+                        "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
+                        errno);
+                closeService(error_msg, data);
+            }
+            if (size == 0)
+            {
+                printf("[Warning] Nothing was read from the pipe - Login\n");
+            }
+            size = read(pdata->fd_manager, &user, sizeof(userData));
+            if (size < 0)
+            {
+                sprintf(error_msg,
+                        "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
+                        errno);
+                closeService(error_msg, data);
+            }
+            if (size == 0)
+            {
+                printf("[Warning] Nothing was read from the pipe - Login\n");
+            }
             break;
         case MESSAGE:
             break;
@@ -205,10 +373,6 @@ void acceptUsers(void *data, userData user)
     if (sendResponse(msg, user.pid))
         pdata->user_list[pdata->current_users++] = user;
     pthread_mutex_unlock(pdata->m);
-
-    //! TO REMOVE, will clutter the manager screen
-    // Is only for the information while developing
-    printf("[INFO] New user {%s} logged in\n", user.name);
     return;
 }
 
@@ -281,10 +445,6 @@ void logoutUser(void *data, int pid)
             }
         }
     }
-
-    //! TO REMOVE, will clutter the manager screen
-    // Is only for the information while developing
-    printf("[INFO] User logged out\n");
     pthread_mutex_unlock(pdata->m);
     return;
 }
@@ -321,23 +481,6 @@ void *updateMessageCounter(void *data)
 void subscribeUser(void *data)
 {
     TDATA *pdata = (TDATA *)data;
-    // userData user;
-    // char *topic_name;
-    // int size = read(pdata->fd_manager, &user, sizeof(userData));
-    // if (size < 0)
-    // {
-    //     signal_EndService(data);
-    //     sprintf(error_msg,
-    //             "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
-    //             errno);
-    //     saveToFile(data);
-    //     closeService(error_msg, data);
-    // }
-    // if (size == 0)
-    // {
-    //     printf("[Warning] Nothing was read from the pipe - Login\n");
-    //     return;
-    // }
 }
 
 void closeService(char *msg, void *data)

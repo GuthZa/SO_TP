@@ -61,7 +61,6 @@ int main()
     do
     {
         read(STDIN_FILENO, message, MSG_MAX_SIZE);
-
         //! Is giving seg fault when only has \n as input
         REMOVE_TRAILING_ENTER(message);
         // Divides the input of the user in multiple strings

@@ -18,6 +18,7 @@ typedef struct
     userData subscribed_users[MAX_USERS];
     int persistent_msg_count;
     msgData persist_msg[MAX_PERSIST_MSG];
+    int is_topic_locked; // 1 is locked, 0 is NOT locked
 } topic;
 
 /**
@@ -73,3 +74,12 @@ void *handleFifoCommunication(void *data);
  * @note Terminates the program
  */
 void closeService(char *msg, void *data);
+
+// Functions to handle admin commands
+void showTopic(void *data, char *topic);
+
+//* Refactor into a single function
+void lockTopic(void *data, char *topic);
+void unlockTopic(void *data, char *topic);
+
+void checkUserExists(void *data, char *user);

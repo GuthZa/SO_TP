@@ -33,7 +33,8 @@ void getFromFile(void *data)
         }
 
         strcpy(pdata->topic_list[topic_count].persist_msg[msg_count].topic, temp_topic);
-
+        //? We can save this information somewhere in the file, eventually
+        pdata->topic_list[topic_count].is_topic_locked = 0;
         //! Do NOT remove the last space from the formatter
         // it "removes" the first space from the msg
         fscanf(fptr, "%s %d ",
