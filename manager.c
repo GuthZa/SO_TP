@@ -405,24 +405,25 @@ int sendResponse(msgData msg, int pid)
 void logoutUser(void *data, int pid)
 {
     TDATA *pdata = (TDATA *)data;
-
+    union sigval val;
+    val.sival_int = -1;
     pthread_mutex_lock(pdata->m);
     // Removes the user from the logged list
-    for (int j = 0; j < pdata->current_users; j++)
+    int j;
+    for (j = 0; j < pdata->current_users; j++)
     {
         if (pdata->user_list[j].pid == pid)
         {
-            // Its not the last user of the array
+            sigqueue(pdata->user_list[j].pid, SIGUSR2, val);
             if (j < pdata->current_users - 1)
                 memcpy(&pdata->user_list[j],
-                       &pdata->user_list[j + 1],
+                       &pdata->user_list[pdata->current_users - 1],
                        sizeof(userData));
-            // Its the last user
-            if (j == pdata->current_users - 1)
-                memset(&pdata->user_list[j], 0, sizeof(userData));
+            memset(&pdata->user_list[pdata->current_users - 1], 0, sizeof(userData));
+            pdata->current_users--;
+            break;
         }
     }
-    pdata->current_users--;
 
     for (int i = 0; i < pdata->current_topics; i++)
     {
@@ -430,18 +431,17 @@ void logoutUser(void *data, int pid)
         {
             if (pdata->topic_list[i].subscribed_users[j].pid == pid)
             {
-                // Its not the last user of the array
+
                 if (j < pdata->topic_list[i].subscribed_user_count - 1)
                     memcpy(&pdata->topic_list[i].subscribed_users[j],
-                           &pdata->topic_list[i].subscribed_users[j + 1],
+                           &pdata->topic_list[i].subscribed_users
+                                [pdata->topic_list[i].subscribed_user_count - 1],
                            sizeof(userData));
-                // Its the last user
-                if (j == pdata->current_users - 1)
-                {
-                    memset(&pdata->topic_list[i].subscribed_users[j],
-                           0, sizeof(userData));
-                    pdata->topic_list[i].subscribed_user_count--;
-                }
+                memset(&pdata->topic_list[i].subscribed_users
+                            [pdata->topic_list[i].subscribed_user_count - 1],
+                       0, sizeof(userData));
+                pdata->topic_list[i].subscribed_user_count--;
+                break;
             }
         }
     }

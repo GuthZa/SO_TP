@@ -1,6 +1,5 @@
 #include "feed.h"
 
-char error_msg[100];
 pthread_t t;
 pthread_mutex_t mutex; // criar a variavel mutex
 
@@ -13,6 +12,7 @@ int main()
     msgType type;
     msgStruct msg_struct;
     char message[MSG_MAX_SIZE];
+    char error_msg[100];
 
     char *argv[MAX_ARGS] = {0};
     int argc = 0;
@@ -119,6 +119,7 @@ int main()
 
 void *handleFifoCommunication(void *data)
 {
+    char error_msg[100];
     char FEED_FIFO_FINAL[100];
     int fd_feed;
     int size;
@@ -172,6 +173,7 @@ void *handleFifoCommunication(void *data)
 
 void sendMessage(msgStruct msg_struct, msgType type, void *data)
 {
+    char error_msg[100];
     int fd_manager;
     if ((fd_manager = open(MANAGER_FIFO, O_WRONLY)) == -1)
     {
