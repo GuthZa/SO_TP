@@ -46,25 +46,25 @@ int main()
 
     /* =================== SERVICE START ===================== */
     char msg[MSG_MAX_SIZE]; // to save admin input
-    char *param, *token;
+    char *param, *command;
     do
     {
         read(STDIN_FILENO, msg, MSG_MAX_SIZE);
         //! Is giving seg fault when only has \n as input
-        msg[strcspn(msg, "\n")] = '\0';
+        REMOVE_TRAILING_ENTER(msg);
         // Divides the input of the user in multiple strings
         // Similar to the way argv is handled
-        token = strtok(msg, " ");
-        if (token != NULL)
+        command = strtok(msg, " ");
+        if (command != NULL)
             param = strtok(NULL, " ");
         else
             continue;
 
-        if (strcmp(token, "close") == 0)
+        if (strcmp(command, "close") == 0)
         {
             closeService(".", &data);
         }
-        else if (strcmp(token, "users") == 0)
+        else if (strcmp(command, "users") == 0)
         {
             pthread_mutex_lock(data.m);
             if (data.current_users == 0)
@@ -75,54 +75,60 @@ int main()
             }
             printf("Current users:\n");
             for (int i = 0; i < data.current_users; i++)
-                printf("%d: %s pid: %d\n", i, data.user_list[i].name, data.user_list[i].pid);
+                printf("%d: %s pid: %d\n",
+                       i + 1,
+                       data.user_list[i].name,
+                       data.user_list[i].pid);
             pthread_mutex_unlock(data.m);
         }
-        else if (strcmp(token, "topics") == 0)
+        else if (strcmp(command, "topics") == 0)
         {
             pthread_mutex_lock(data.m);
             printf("Current topics:\n");
             for (int i = 0; i < data.current_topics; i++)
-                printf("%d: %s with %d users subscribed.\n", i, data.topic_list[i].topic);
+                printf("%d: %s with %d users subscribed.\n",
+                       i + 1,
+                       data.topic_list[i].topic,
+                       data.topic_list[i].subscribed_user_count);
             pthread_mutex_unlock(data.m);
         }
-        else if (strcmp(token, "remove") == 0)
+        else if (strcmp(command, "remove") == 0)
         {
             if (param == NULL)
             {
-                printf("%s <username>\nPress help for available comands.", token);
+                printf("%s <username>\nPress help for available comands.", command);
                 continue;
             }
-            checkUserExists(&data, param);
+            checkUserExistsAndLogOut(&data, param);
         }
-        else if (strcmp(token, "show") == 0)
+        else if (strcmp(command, "show") == 0)
         {
             if (param == NULL)
             {
-                printf("%s <topic>\nPress help for available comands.", token);
+                printf("%s <topic>\nPress help for available comands.", command);
                 continue;
             }
             showTopic(&data, param);
         }
-        else if (strcmp(token, "lock") == 0)
+        else if (strcmp(command, "lock") == 0)
         {
             if (param == NULL)
             {
-                printf("%s <topic>\nPress help for a list of available comands.", token);
+                printf("%s <topic>\nPress help for a list of available comands.", command);
                 continue;
             }
             lockTopic(&data, param);
         }
-        else if (strcmp(token, "unlock") == 0)
+        else if (strcmp(command, "unlock") == 0)
         {
             if (param == NULL)
             {
-                printf("%s <topic>\nPress help for a list of available commands.", token);
+                printf("%s <topic>\nPress help for a list of available commands.", command);
                 continue;
             }
             lockTopic(&data, param);
         }
-        else if (strcmp(token, "help") == 0)
+        else if (strcmp(command, "help") == 0)
         {
             printf("users - for the list of currently active users.\n");
             printf("remove <username> - to log out the user <username>.\n");
@@ -202,7 +208,7 @@ void lockTopic(void *data, char *topic)
     return;
 }
 
-void checkUserExists(void *data, char *user)
+void checkUserExistsAndLogOut(void *data, char *user)
 {
     TDATA *pdata = (TDATA *)data;
     pthread_mutex_lock(pdata->m);
@@ -225,12 +231,12 @@ void *handleFifoCommunication(void *data)
     char error_msg[100];
     msgType type;
     TDATA *pdata = (TDATA *)data;
-    int fd_manager, size;
+    int fd, size;
     userData user;
 
     /* ================== SETUP THE PIPES ================== */
     createFifo(MANAGER_FIFO);
-    if ((fd_manager = open(MANAGER_FIFO, O_RDWR)) == -1)
+    if ((fd = open(MANAGER_FIFO, O_RDWR)) == -1)
     {
         sprintf(error_msg,
                 "[Error] Code: {%d}\n Unable to open the server pipe for reading - Setup\n",
@@ -239,12 +245,12 @@ void *handleFifoCommunication(void *data)
     }
 
     pthread_mutex_lock(pdata->m);
-    pdata->fd_manager = fd_manager;
+    pdata->fd_manager = fd;
     pthread_mutex_unlock(pdata->m);
 
     do
     {
-        if (read(fd_manager, &type, sizeof(msgType)) < 0)
+        if (read(fd, &type, sizeof(msgType)) < 0)
         {
             sprintf(error_msg,
                     "[Error] Code: {%d}\n Unable to read from the server pipe - Type\n",
@@ -254,7 +260,7 @@ void *handleFifoCommunication(void *data)
         switch (type)
         {
         case LOGIN:
-            size = read(fd_manager, &user, sizeof(userData));
+            size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
                 sprintf(error_msg,
@@ -268,7 +274,7 @@ void *handleFifoCommunication(void *data)
             acceptUsers(data, user);
             break;
         case LOGOUT:
-            size = read(fd_manager, &user, sizeof(userData));
+            size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
                 sprintf(error_msg,
@@ -284,7 +290,7 @@ void *handleFifoCommunication(void *data)
         case SUBSCRIBE:
             userData user;
             char topic_name[TOPIC_MAX_SIZE];
-            int size = read(pdata->fd_manager, &user, sizeof(userData));
+            int size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
                 sprintf(error_msg,
@@ -296,7 +302,7 @@ void *handleFifoCommunication(void *data)
             {
                 printf("[Warning] Nothing was read from the pipe - Login\n");
             }
-            size = read(pdata->fd_manager, &user, sizeof(userData));
+            size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
                 sprintf(error_msg,
@@ -319,7 +325,7 @@ void *handleFifoCommunication(void *data)
         type = -1;
     } while (!pdata->stop);
 
-    close(fd_manager);
+    close(fd);
     unlink(MANAGER_FIFO);
     pthread_exit(NULL);
 }

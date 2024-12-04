@@ -24,9 +24,12 @@ typedef struct
 
 /**
  * @param msg_struct msgStruct
+ * @param error_msg *char
+ *
+ * @return -1 if there was na error, 0 otherwise
  *
  */
-void sendMessage(msgStruct login_form, msgType type, void *data);
+int sendMessage(msgStruct login_form, msgType type, char *error_msg);
 
 /**
  * @param msg Log message to be used

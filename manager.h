@@ -82,4 +82,4 @@ void showTopic(void *data, char *topic);
 void lockTopic(void *data, char *topic);
 void unlockTopic(void *data, char *topic);
 
-void checkUserExists(void *data, char *user);
+void checkUserExistsAndLogOut(void *data, char *user);

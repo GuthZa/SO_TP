@@ -2,6 +2,7 @@
 
 pthread_t t;
 pthread_mutex_t mutex; // criar a variavel mutex
+char FEED_FIFO_FINAL[100];
 
 int main()
 {
@@ -11,11 +12,8 @@ int main()
 
     msgType type;
     msgStruct msg_struct;
-    char message[MSG_MAX_SIZE];
     char error_msg[100];
-
-    char *argv[MAX_ARGS] = {0};
-    int argc = 0;
+    char message[MSG_MAX_SIZE];
 
     // Signal to remove the pipe
     struct sigaction sa;
@@ -49,6 +47,27 @@ int main()
     strcpy(data.user.name, message);
     data.user.pid = getpid();
 
+    /* =============== SETUP THE PIPES & LOGIN ===================== */
+
+    //! user is sending 2 login messages
+    // Checks there's a pipe with the same pid or creates one
+    sprintf(FEED_FIFO_FINAL, FEED_FIFO, getpid());
+    createFifo(FEED_FIFO_FINAL);
+
+    pthread_mutex_lock(data.m);
+    msg_struct.logIO.user = data.user;
+    pthread_mutex_unlock(data.m);
+    if (sendMessage(msg_struct, LOGIN, error_msg) < 0)
+        closeService(error_msg, &data);
+
+    pthread_mutex_lock(data.m);
+    if ((data.fd_feed = open(FEED_FIFO_FINAL, O_RDWR)) < 0)
+    {
+        strcpy(error_msg, "[Error] Unable to open the server pipe for reading.\n");
+        closeService(error_msg, &data);
+    }
+    pthread_mutex_unlock(data.m);
+
     if (pthread_create(&t, NULL, &handleFifoCommunication, &data) != 0)
     {
         sprintf(error_msg,
@@ -58,35 +77,31 @@ int main()
     }
 
     /* ====================== SERVICE START ======================== */
+    char *command, *param;
     do
     {
         read(STDIN_FILENO, message, MSG_MAX_SIZE);
         //! Is giving seg fault when only has \n as input
         REMOVE_TRAILING_ENTER(message);
-        // Divides the input of the user in multiple strings
-        // Similar to the way argv is handled
-        for (char *token = strtok(message, " ");
-             token != NULL;
-             token = strtok(NULL, " "))
-        {
-            argv[argc++] = token;
-            if (argc >= MAX_ARGS)
-                break;
-        }
+        command = strtok(message, " ");
+        if (command != NULL)
+            param = strtok(NULL, " ");
+        else
+            continue;
 
         /* =============== CHECK COMMAND VALIDITY =================== */
-        if (strcmp(argv[0], "exit") == 0)
+        if (strcmp(command, "exit") == 0)
         {
             pthread_mutex_lock(data.m);
             memcpy(&msg_struct.logIO.user, &data.user, sizeof(userData));
-            sendMessage(msg_struct, LOGOUT, &data);
             pthread_mutex_unlock(data.m);
+            sendMessage(msg_struct, LOGOUT, error_msg);
             closeService(".", &data);
         }
-        if (strcmp(argv[0], "msg") != 0)
+        if (strcmp(command, "msg") != 0)
         {
         }
-        else if (strcmp(argv[0], "subscribe") != 0)
+        else if (strcmp(command, "subscribe") != 0)
         {
             //! VERIFY TOPIC NO SPACES
             // msg_struct.subsIO.type = SUBSCRIBE;
@@ -99,14 +114,19 @@ int main()
             // closeService(FEED_FIFO_FINAL, fd_manager, fd_feed);
             // exit(0);
         }
-        else if (strcmp(argv[0], "unsubscribe") != 0)
+        else if (strcmp(command, "unsubscribe") != 0)
         {
         }
-        else if (strcmp(argv[0], "topics") != 0)
+        else if (strcmp(command, "topics") != 0)
         {
         }
-        else if (strcmp(argv[0], "help") != 0)
+        else if (strcmp(command, "help") != 0)
         {
+            printf("topics - for the list of currently existing topics.\n");
+            printf("msg <topic> <duration> <message> - to see the persistant messages of <topic>.\n");
+            printf("subscribe <topic> - To be able receive and send messages.\n");
+            printf("unsubscribe <topcis> - stops receiving messages from the <topic>.\n");
+            printf("exit - to exit and end the server.\n");
         }
         else
         {
@@ -120,32 +140,14 @@ int main()
 void *handleFifoCommunication(void *data)
 {
     char error_msg[100];
-    char FEED_FIFO_FINAL[100];
     int fd_feed;
     int size;
     msgData resp;
     msgStruct msg_struct;
     TDATA *pdata = (TDATA *)data;
 
-    /* =============== SETUP THE PIPES & LOGIN ===================== */
-
-    // Checks there's a pipe with the same pid or creates one
-    sprintf(FEED_FIFO_FINAL, FEED_FIFO, getpid());
-    createFifo(FEED_FIFO_FINAL);
-
     pthread_mutex_lock(pdata->m);
-    msg_struct.logIO.user = pdata->user;
-    pthread_mutex_unlock(pdata->m);
-    sendMessage(msg_struct, LOGIN, data);
-
-    if ((fd_feed = open(FEED_FIFO_FINAL, O_RDWR)) < 0)
-    {
-        strcpy(error_msg, "[Error] Unable to open the server pipe for reading.\n");
-        closeService(error_msg, data);
-    }
-
-    pthread_mutex_lock(pdata->m);
-    memcpy(&pdata->fd_feed, &fd_feed, sizeof(int));
+    fd_feed = pdata->fd_feed;
     pthread_mutex_unlock(pdata->m);
 
     do
@@ -171,55 +173,60 @@ void *handleFifoCommunication(void *data)
     pthread_exit(NULL);
 }
 
-void sendMessage(msgStruct msg_struct, msgType type, void *data)
+int sendMessage(msgStruct msg_struct, msgType type, char *error_msg)
 {
-    char error_msg[100];
-    int fd_manager;
-    if ((fd_manager = open(MANAGER_FIFO, O_WRONLY)) == -1)
+    int fd;
+    if ((fd = open(MANAGER_FIFO, O_WRONLY)) == -1)
     {
         sprintf(error_msg, "[Error %d]\n Unable to open the server pipe for reading.\n", errno);
-        closeService(error_msg, 0);
+        return -1;
     }
 
     switch (type)
     {
     case LOGIN:
-        sprintf(error_msg, "[Error] {Login}\n Unable to send message\n");
         msg_struct.logIO.type = type;
-        if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
-            closeService(error_msg, data);
-        break;
+        if (write(fd, &msg_struct.logIO, sizeof(login)) < 0)
+        {
+            sprintf(error_msg, "[Error] {Login}\n Unable to send message\n");
+            return -1;
+        }
     case LOGOUT:
-        sprintf(error_msg, "[Error] {LOGOUT}\n Unable to send message\n");
+
         msg_struct.logIO.type = type;
-        if (write(fd_manager, &msg_struct.logIO, sizeof(login)) == -1)
-            closeService(error_msg, data);
-        break;
+        if (write(fd, &msg_struct.logIO, sizeof(login)) < 0)
+        {
+            sprintf(error_msg, "[Error] {LOGOUT}\n Unable to send message\n");
+            return -1;
+        }
     case SUBSCRIBE:
-        sprintf(error_msg, "[Error] {SUBSCRIBE}\n Unable to send message\n");
         msg_struct.subsIO.type = type;
-        if (write(fd_manager, &msg_struct.subsIO, sizeof(subscribe)) == -1)
-            closeService(error_msg, data);
+        if (write(fd, &msg_struct.subsIO, sizeof(subscribe)) < 0)
+        {
+            sprintf(error_msg, "[Error] {SUBSCRIBE}\n Unable to send message\n");
+            return -1;
+        }
         break;
     case MESSAGE:
-        sprintf(error_msg, "[Error] {MESSAGE}\n Unable to send message\n");
         msg_struct.msg.type = type;
         //! Calculate message size
-        if (write(fd_manager, &msg_struct.msg, sizeof(message)) == -1)
-            closeService(error_msg, data);
-        break;
+        if (write(fd, &msg_struct.msg, sizeof(message)) < 0)
+        {
+            sprintf(error_msg, "[Error] {MESSAGE}\n Unable to send message\n");
+            return -1;
+        }
     case LIST:
-        sprintf(error_msg, "[Error] {LIST}\n Unable to send message\n");
         msg_struct.subsIO.type = type;
-        if (write(fd_manager, &msg_struct.subsIO, sizeof(subscribe)) == -1)
-            closeService(error_msg, data);
-        break;
-    default:
-        break;
+        if (write(fd, &msg_struct.subsIO, sizeof(subscribe)) == -1)
+        {
+            sprintf(error_msg, "[Error] {LIST}\n Unable to send message\n");
+            return -1;
+        }
     }
 
-    close(fd_manager);
-    return;
+    sprintf(error_msg, ".");
+    close(fd);
+    return 0;
 }
 
 void closeService(char *msg, void *data)
