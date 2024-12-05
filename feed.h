@@ -1,19 +1,5 @@
 #include "helper.h"
 
-/**
- * @param logIO login
- * @param subsIO subscribe
- * @param msg message
- *
- * @note union with all message types
- */
-typedef union
-{
-    login logIO;
-    subscribe subsIO;
-    message msg;
-} msgStruct;
-
 typedef struct
 {
     int stop;
@@ -22,6 +8,16 @@ typedef struct
     pthread_mutex_t *m;
 } TDATA;
 
+/** Wrappper of userData to login
+ * @param type enum with message type
+ * @param user userData
+ */
+typedef struct
+{
+    msgType type;
+    userData user;
+} request;
+
 /**
  * @param msg_struct msgStruct
  * @param error_msg *char
@@ -29,7 +25,11 @@ typedef struct
  * @return -1 if there was na error, 0 otherwise
  *
  */
-int sendMessage(msgStruct login_form, msgType type, char *error_msg);
+void sendMessage(void *data, char *msg);
+
+void sendSubscribeUnsubscribe(void *data, msgType type, char *topic);
+
+void sendRequest(void *data, msgType type);
 
 /**
  * @param msg Log message to be used

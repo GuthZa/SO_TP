@@ -21,7 +21,10 @@
 
 #define MAX_USERS 10 // Max users
 
+// To remove '\n' from the string
 #define REMOVE_TRAILING_ENTER(str) str[strcspn(str, "\n")] = '\0'
+// Already accounts for the '\0'
+#define CALCULATE_MSG_SIZE(str) TOPIC_MAX_SIZE + USER_MAX_SIZE + sizeof(int) + strlen(str) + 1
 
 // Used to wrap each message
 typedef enum
@@ -29,6 +32,7 @@ typedef enum
     LOGIN,
     LOGOUT,
     SUBSCRIBE,
+    UNSUBSCRIBE,
     MESSAGE,
     RESPONSE,
     LIST,
@@ -60,16 +64,6 @@ typedef struct
     int time; // Time until being deleted
     char text[MSG_MAX_SIZE];
 } msgData;
-
-/** Wrappper of userData to login
- * @param type enum with message type
- * @param user userData
- */
-typedef struct
-{
-    msgType type;
-    userData user;
-} login;
 
 /**
  * @note Wrapper of message with the size

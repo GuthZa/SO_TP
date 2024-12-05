@@ -211,12 +211,15 @@ void lockTopic(void *data, char *topic)
 void checkUserExistsAndLogOut(void *data, char *user)
 {
     TDATA *pdata = (TDATA *)data;
+    union sigval val;
+    val.sival_int = -1;
     pthread_mutex_lock(pdata->m);
     for (int i = 0; i < pdata->current_users; i++)
     {
         if (strcmp(pdata->user_list[i].name, user) == 0)
         {
             pthread_mutex_unlock(pdata->m);
+            sigqueue(pdata->user_list[i].pid, SIGUSR2, val);
             logoutUser(data, pdata->user_list[i].pid);
             return;
         }
@@ -394,14 +397,12 @@ int sendResponse(msgData msg, int pid)
     }
     response resp;
 
-    // To account for '\0'
-    resp.size = TOPIC_MAX_SIZE + USER_MAX_SIZE + sizeof(int) + strlen(msg.text) + 1;
+    resp.size = CALCULATE_MSG_SIZE(msg.text);
     resp.message = msg;
     // If there's an error sending OK to login, we discard the login attempt
     if (write(fd, &resp, resp.size + sizeof(int)) <= 0)
     {
         printf("[Warning] Unable to respond to the client.\n");
-        return 0;
     }
 
     close(fd);
@@ -411,8 +412,6 @@ int sendResponse(msgData msg, int pid)
 void logoutUser(void *data, int pid)
 {
     TDATA *pdata = (TDATA *)data;
-    union sigval val;
-    val.sival_int = -1;
     pthread_mutex_lock(pdata->m);
     // Removes the user from the logged list
     int j;
@@ -420,7 +419,6 @@ void logoutUser(void *data, int pid)
     {
         if (pdata->user_list[j].pid == pid)
         {
-            sigqueue(pdata->user_list[j].pid, SIGUSR2, val);
             if (j < pdata->current_users - 1)
                 memcpy(&pdata->user_list[j],
                        &pdata->user_list[pdata->current_users - 1],
@@ -467,14 +465,14 @@ void *updateMessageCounter(void *data)
             {
                 if (--pdata->topic_list[j].persist_msg[i].time <= 0)
                 {
-                    // Its not the last message in the array
                     if (i < pdata->topic_list[j].persistent_msg_count - 1)
                         memcpy(&pdata->topic_list[j].persist_msg[i],
-                               &pdata->topic_list[j].persist_msg[i + 1],
+                               &pdata->topic_list[j].persist_msg
+                                    [pdata->topic_list[j].persistent_msg_count - 1],
                                sizeof(msgData));
-                    // Its the last message
-                    if (i == pdata->topic_list[j].persistent_msg_count - 1)
-                        memset(&pdata->topic_list[j].persist_msg[i], 0, sizeof(msgData));
+                    memset(&pdata->topic_list[j].persist_msg
+                                [pdata->topic_list[j].persistent_msg_count - 1],
+                           0, sizeof(msgData));
                 }
             }
         }
@@ -511,6 +509,7 @@ void closeService(char *msg, void *data)
     if (pthread_join(t[1], NULL) == EDEADLK)
         printf("[Warning] Deadlock when closing the thread for input\n");
     pthread_mutex_destroy(&mutex);
-
+    close(pdata->fd_manager);
+    unlink(MANAGER_FIFO);
     strcmp(msg, ".") == 0 ? exit(EXIT_SUCCESS) : exit(EXIT_FAILURE);
 }
