@@ -4,6 +4,7 @@ typedef struct
 {
     int stop;
     int fd_feed;
+    char fifoName[100];
     userData user;
     pthread_mutex_t *m;
 } TDATA;
@@ -41,5 +42,7 @@ void sendRequest(void *data, msgType type);
  * @note Terminates the program
  */
 void closeService(char *msg, void *data);
+
+void handle_closeService(int s, siginfo_t *i, void *v);
 
 void *handleFifoCommunication(void *data);
