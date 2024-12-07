@@ -5,7 +5,8 @@ void *updateMessageCounter(void *data)
     TDATA *pdata = (TDATA *)data;
     do
     {
-        printf("locking on the time\n");
+        if (pdata->isDev)
+            printf("locking on the time\n");
         pthread_mutex_lock(pdata->mutex_topics);
         for (int j = 0; j < pdata->current_topics;)
         {
@@ -17,7 +18,8 @@ void *updateMessageCounter(void *data)
                 j++;
         }
         pthread_mutex_unlock(pdata->mutex_topics);
-        printf("unlocking on the time\n");
+        if (pdata->isDev)
+            printf("unlocking on the time\n");
         sleep(1);
     } while (!pdata->stop);
     pthread_exit(NULL);

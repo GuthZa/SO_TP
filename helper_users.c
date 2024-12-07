@@ -43,18 +43,22 @@ void logoutUser(void *data, userData user)
     TDATA *pdata = (TDATA *)data;
 
     // Removes the user from the user_list
-    printf("locking to remove user, logout\n");
+    if (pdata->isDev)
+        printf("locking to remove user, logout\n");
     pthread_mutex_lock(pdata->mutex_users);
     removeUserFromUserList(pdata->user_list, &pdata->current_users, user.pid);
     pthread_mutex_unlock(pdata->mutex_users);
-    printf("unlocking to remove user, logout\n");
+    if (pdata->isDev)
+        printf("unlocking to remove user, logout\n");
 
-    printf("locking to remove topic, logout\n");
+    if (pdata->isDev)
+        printf("locking to remove topic, logout\n");
     // Removes the user from All topics
     pthread_mutex_lock(pdata->mutex_topics);
     removeUserFromAllTopics(pdata->topic_list, &pdata->current_topics, user.pid);
     pthread_mutex_unlock(pdata->mutex_topics);
-    printf("unlocking to remove topic, logout\n");
+    if (pdata->isDev)
+        printf("unlocking to remove topic, logout\n");
     return;
 }
 

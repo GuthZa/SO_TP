@@ -41,6 +41,7 @@ typedef struct
     int current_users;
     pthread_mutex_t *mutex_users;
     pthread_mutex_t *mutex_topics;
+    int isDev;
 } TDATA;
 
 /* ===================== RESPONSES AND REQUESTS ======================= */
