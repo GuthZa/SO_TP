@@ -282,7 +282,7 @@ void checkUserExistsAndLogOut(char *user, void *data)
         {
             pthread_mutex_unlock(pdata->m);
             sigqueue(pdata->user_list[i].pid, SIGUSR2, val);
-            logoutUser(data, pdata->user_list[i].pid);
+            logoutUser(data, pdata->user_list[i]);
             return;
         }
     }
@@ -351,7 +351,7 @@ void *handleFifoCommunication(void *data)
             if (size == 0)
                 printf("[Warning] Nothing was read from the pipe - Logout\n");
 
-            logoutUser(data, user.pid);
+            logoutUser(data, user);
             break;
         case SUBSCRIBE:
             userData user;
@@ -384,6 +384,36 @@ void *handleFifoCommunication(void *data)
 
             subscribeUser(user, topic_name, &data);
             break;
+        case UNSUBSCRIBE:
+            userData user;
+            char topic_name[TOPIC_MAX_SIZE];
+            int size = read(fd, &user, sizeof(userData));
+            if (size < 0)
+            {
+                sprintf(error_msg,
+                        "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
+                        errno);
+                closeService(error_msg, data);
+            }
+            if (size == 0)
+            {
+                printf("[Warning] Nothing was read from the pipe - Login\n");
+            }
+            size = read(fd, topic_name, TOPIC_MAX_SIZE);
+            if (size < 0)
+            {
+                sprintf(error_msg,
+                        "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
+                        errno);
+                closeService(error_msg, data);
+            }
+            if (size == 0)
+            {
+                printf("[Warning] Nothing was read from the pipe - Login\n");
+                continue;
+            }
+
+            unsubscribeUser(user.pid, topic_name, &data);
         case MESSAGE:
             break;
         case LIST:
@@ -475,67 +505,139 @@ int sendResponse(msgData msg, int pid)
     return 1;
 }
 
-void logoutUser(void *data, int pid)
+void logoutUser(void *data, userData user)
 {
 
     TDATA *pdata = (TDATA *)data;
     pthread_mutex_lock(pdata->m);
     // Removes the user from the logged list
-    int j;
-    for (j = 0; j < pdata->current_users; j++)
+    if (removeUserFromList(&pdata->user_list,
+                           &pdata->current_users, user.pid) == -1)
     {
-        if (pdata->user_list[j].pid == pid)
-        {
-            if (j < pdata->current_users - 1)
-                memcpy(&pdata->user_list[j],
-                       &pdata->user_list[pdata->current_users - 1],
-                       sizeof(userData));
-            memset(&pdata->user_list[pdata->current_users - 1], 0, sizeof(userData));
-            pdata->current_users--;
-            break;
-        }
+        printf("[Warning] User %s with pid [%d] does not exist.\n",
+               user.name,
+               user.pid);
     }
 
-    for (int i = 0; i < pdata->current_topics; i++)
+    if (removeUserFromTopics(&pdata->topic_list,
+                             pdata->current_topics, user.pid) == -1)
     {
-        for (int j = 0; j < pdata->topic_list[i].subscribed_user_count; j++)
-        {
-            if (pdata->topic_list[i].subscribed_users[j].pid == pid)
-            {
-
-                if (j < pdata->topic_list[i].subscribed_user_count - 1)
-                    memcpy(&pdata->topic_list[i].subscribed_users[j],
-                           &pdata->topic_list[i].subscribed_users
-                                [pdata->topic_list[i].subscribed_user_count - 1],
-                           sizeof(userData));
-                memset(&pdata->topic_list[i].subscribed_users
-                            [pdata->topic_list[i].subscribed_user_count - 1],
-                       0, sizeof(userData));
-                pdata->topic_list[i].subscribed_user_count--;
-                break;
-            }
-        }
+        printf("[INFO] User %s with pid [%d] is not subscribe to any topic.\n",
+               user.name,
+               user.pid);
     }
+
     pthread_mutex_unlock(pdata->m);
     return;
 }
 
+int removeUserFromList(userData *user_list, int *user_count, int pid)
+{
+    for (int j = 0; j < *user_count; j++)
+    {
+        if (user_list[j].pid == pid)
+        {
+            // Replaces the current user with the last user
+            if (j < *user_count - 1)
+                memcpy(&user_list[j],
+                       &user_list[*user_count - 1],
+                       sizeof(userData));
+
+            // Clears the last user and updates the count
+            memset(&user_list[*user_count - 1], 0, sizeof(userData));
+            (*user_count)--;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int removeUserFromTopics(topic *topic_list, int topic_count, int pid)
+{
+    int last_user;
+    for (int i = 0; i < topic_count; i++)
+    {
+        for (int j = 0; j < topic_list[i].subscribed_user_count; j++)
+        {
+            if (topic_list[i].subscribed_users[j].pid == pid)
+            {
+                last_user = topic_list[i].subscribed_user_count - 1;
+                // Replaces the current subscriber with the last in the list
+                if (j < last_user)
+                    memcpy(&topic_list[i].subscribed_users[j],
+                           &topic_list[i].subscribed_users[last_user],
+                           sizeof(userData));
+
+                // Clears the last subscriber and updates the count
+                memset(&topic_list[i].subscribed_users[last_user],
+                       0, sizeof(userData));
+                topic_list[i].subscribed_user_count--;
+                return 0;
+            }
+        }
+    }
+    return -1;
+}
+
 void subscribeUser(userData user, char *topic_name, void *data)
 {
-    TDATA *pdata = (TDATA *)data;
     //* Maybe guarantee that it also exists on user_list
-
-    int i;
+    TDATA *pdata = (TDATA *)data;
     pthread_mutex_lock(pdata->m);
     int last_topic = pdata->current_topics;
     int last_user;
-    for (i = 0; i < last_topic; i++)
+    for (int i = 0; i < last_topic; i++)
     {
         if (strcmp(topic_name, pdata->topic_list[i].topic) == 0)
         {
             last_user = pdata->topic_list[i].subscribed_user_count;
-            memcpy(&pdata->topic_list[i].subscribed_users[last_user - 1],
+
+            memcpy(&pdata->topic_list[i]
+                        .subscribed_users[last_user - 1],
                    &user, sizeof(userData));
+
+            pdata->topic_list[i].subscribed_user_count++;
+            pthread_mutex_unlock(pdata->m);
+            return;
+        }
+    }
+    createNewTopic(&pdata->topic_list[pdata->current_topics], topic_name, data);
+    last_user = pdata->topic_list[last_topic].subscribed_user_count;
+
+    memcpy(&pdata->topic_list[last_topic]
+                .subscribed_users[last_user - 1],
+           &user, sizeof(userData));
+
+    pdata->topic_list[last_topic].subscribed_user_count++;
+    pdata->current_topics++;
+
+    pthread_mutex_unlock(pdata->m);
+    return;
+}
+
+void unsubscribeUser(int pid, char *topic_name, void *data)
+{
+    //* Maybe guarantee that it also exists on user_list
+    TDATA *pdata = (TDATA *)data;
+    pthread_mutex_lock(pdata->m);
+    int last_topic = pdata->current_topics;
+    int last_user;
+    for (int i = 0; i < last_topic; i++)
+    {
+        if (strcmp(topic_name, pdata->topic_list[i].topic) == 0)
+        {
+            last_user = pdata->topic_list[i].subscribed_user_count;
+            for (int j = 0; j < last_user; j++)
+            {
+                if (pdata->topic_list[i].subscribed_users[j].pid == pid)
+                {
+                }
+            }
+
+            memcpy(&pdata->topic_list[i]
+                        .subscribed_users[last_user - 1],
+                   &user, sizeof(userData));
+
             pdata->topic_list[i].subscribed_user_count++;
             pthread_mutex_unlock(pdata->m);
             return;

@@ -61,7 +61,10 @@ int sendResponse(msgData msg, int pid);
  * Will remove the user from:
  * user_list and topic_list->subscribed_user
  */
-void logoutUser(void *data, int pid);
+void logoutUser(void *data, userData user);
+
+int removeUserFromList(userData *user_list, int *user_count, int pid);
+int removeUserFromTopics(topic *topic_list, int topic_count, int pid);
 
 /**
  * ?Send message
@@ -71,6 +74,7 @@ void logoutUser(void *data, int pid);
 void signal_EndService(void *data);
 
 void subscribeUser(userData user, char *topic, void *data);
+void unsubscribeUser(int pid, char *topic_name, void *data);
 
 /**
  * Function to guarantee that there's no trash information in the struct
