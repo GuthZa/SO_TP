@@ -9,7 +9,12 @@ void *updateMessageCounter(void *data)
         for (int j = 0; j < pdata->current_topics; j++)
         {
             decrementMessageTimers(&pdata->topic_list[j]);
-            cleanupEmptyTopic(&pdata->topic_list[j]);
+
+            if (pdata->topic_list[j].persistent_msg_count <= 0 &&
+                pdata->topic_list[j].subscribed_user_count <= 0)
+            {
+                memset(&pdata->topic_list[j], 0, sizeof(topic));
+            }
         }
         pthread_mutex_unlock(pdata->m);
         sleep(1);
@@ -31,22 +36,15 @@ void decrementMessageTimers(topic *current_topic)
 
 void removeExpiredMessage(int message_index, topic *current_topic)
 {
+    int last_message = current_topic->persistent_msg_count - 1;
     // Swap and remove the expired message
-    if (message_index < current_topic->persistent_msg_count - 1)
+    if (message_index < last_message)
     {
         memcpy(&current_topic->persist_msg[message_index],
-               &current_topic->persist_msg[current_topic->persistent_msg_count - 1],
+               &current_topic->persist_msg[last_message],
                sizeof(msgData));
     }
-    memset(&current_topic->persist_msg[current_topic->persistent_msg_count - 1],
+    memset(&current_topic->persist_msg[last_message],
            0, sizeof(msgData));
     current_topic->persistent_msg_count--;
-}
-
-void cleanupEmptyTopic(topic *current_topic)
-{
-    if (current_topic->persistent_msg_count <= 0 && current_topic->subscribed_user_count <= 0)
-    {
-        memset(current_topic, 0, sizeof(topic));
-    }
 }

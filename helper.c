@@ -18,7 +18,7 @@ void createFifo(char *fifo)
     }
 }
 
-void handle_OverrideCancel(int s, siginfo_t *i, void *v)
+void handleOverrideCancel(int s, siginfo_t *i, void *v)
 {
     printf("Please type exit\n");
 }

@@ -161,7 +161,7 @@ void *handleFifoCommunication(void *data)
         if (size > 0 && read(pdata->fd_feed, &resp, size) > 0)
         {
             REMOVE_TRAILING_ENTER(resp.text);
-            printf("%s: %s %s\n", resp.user, resp.topic, resp.text);
+            printf("%s %s - %s\n", resp.user, resp.topic, resp.text);
             if (strcmp(resp.topic, "Warning") == 0 ||
                 strcmp(resp.topic, "Close") == 0)
                 closeService(".", data);
@@ -193,7 +193,7 @@ void sendRequest(void *data, msgType type)
         close(fd);
         closeService(error_msg, data);
     }
-    printf("\nRequest sent\n");
+    printf("Request sent\n");
 
     close(fd);
     return;
