@@ -17,11 +17,15 @@ void getFromFile(void *data)
         return;
     }
 
-    int msg_count = 0, topic_count = 0, firstLine = 1;
+    int msg_count = 0, topic_count = 0, firstLine = 1, size;
     char temp_topic[20];
     while (!feof(fptr))
     {
-        fscanf(fptr, "%s", temp_topic);
+        if (fscanf(fptr, "%s", temp_topic) < 0)
+        {
+            fclose(fptr);
+            return;
+        }
         if (strcmp(temp_topic, pdata->topic_list[topic_count].topic) != 0)
         {
             if (!firstLine)
@@ -32,7 +36,8 @@ void getFromFile(void *data)
             msg_count = 0;
         }
 
-        strcpy(pdata->topic_list[topic_count].persist_msg[msg_count].topic, temp_topic);
+        strcpy(pdata->topic_list[topic_count].persist_msg[msg_count].topic,
+               temp_topic);
         //? We can save this information somewhere in the file, eventually
         pdata->topic_list[topic_count].is_topic_locked = 0;
         //! Do NOT remove the last space from the formatter
