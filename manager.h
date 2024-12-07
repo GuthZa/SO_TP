@@ -59,10 +59,19 @@ void signal_EndService(void *data);
 void subscribeUser(void *data);
 
 void getFromFile(void *data);
-
 void saveToFile(void *data);
 
+// Handles updating, remove expired messages and topics
 void *updateMessageCounter(void *data);
+void decrementMessageTimers(topic *t);
+/**
+ * @param message_index int index in the persist_msg
+ * @param current_topic pointer to topic
+ *
+ * @note removes the message from persist_msg[message_index] from the current topic
+ */
+void removeExpiredMessage(int message_index, topic *current_topic);
+void cleanupEmptyTopic(topic *current_topic);
 
 void *handleFifoCommunication(void *data);
 /**
@@ -81,5 +90,7 @@ void showTopic(void *data, char *topic);
 //* Refactor into a single function
 void lockTopic(void *data, char *topic);
 void unlockTopic(void *data, char *topic);
+
+void writeTopicList(int fd, void *data);
 
 void checkUserExistsAndLogOut(void *data, char *user);
