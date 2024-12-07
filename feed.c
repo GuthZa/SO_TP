@@ -61,6 +61,7 @@ int main()
     sprintf(data.fifoName, FEED_FIFO, getpid());
     createFifo(data.fifoName);
 
+    printf("\nAwaiting confirmation for log in...\n");
     sendRequest(&data, LOGIN);
 
     if ((data.fd_feed = open(data.fifoName, O_RDWR)) < 0)
@@ -92,6 +93,7 @@ int main()
         /* =============== CHECK COMMAND VALIDITY =================== */
         if (strcmp(command, "exit") == 0)
         {
+            printf("Logging off...\n");
             sendRequest(&data, LOGOUT);
             closeService(".", &data);
         }
@@ -138,6 +140,9 @@ int main()
         {
             printf("Command invalid, please write help for a list of commands\n");
         }
+        // Reseting the inputs
+        param = NULL;
+        command = NULL;
 
     } while (1);
     exit(EXIT_SUCCESS);
@@ -161,6 +166,17 @@ void *handleFifoCommunication(void *data)
         if (size > 0 && read(pdata->fd_feed, &resp, size) > 0)
         {
             REMOVE_TRAILING_ENTER(resp.text);
+
+            if (strcmp(resp.topic, "Topic List") == 0)
+            {
+                printf("%s\n", resp.topic);
+                printf("%s", resp.text);
+                if (resp.time > 14)
+                    printf("%s", resp.user);
+
+                continue;
+            }
+
             printf("%s %s - %s\n", resp.user, resp.topic, resp.text);
             if (strcmp(resp.topic, "Warning") == 0 ||
                 strcmp(resp.topic, "Close") == 0)
@@ -193,7 +209,8 @@ void sendRequest(void *data, msgType type)
         close(fd);
         closeService(error_msg, data);
     }
-    printf("Request sent\n");
+
+    printf("\tRequest Sent\n");
 
     close(fd);
     return;
@@ -294,8 +311,7 @@ void closeService(char *msg, void *data)
 
     // Unblocks the read
     write(pdata->fd_feed, &i, sizeof(int));
-    if (pthread_join(t, NULL) == EDEADLK)
-        printf("[Warning] Deadlock when closing the thread for the timer\n");
+    pthread_join(t, NULL);
 
     pthread_mutex_destroy(&mutex);
 

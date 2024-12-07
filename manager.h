@@ -39,14 +39,14 @@ typedef struct
     int current_topics;
     userData user_list[MAX_USERS];
     int current_users;
-    pthread_mutex_t *m;
+    pthread_mutex_t *mutex_users;
+    pthread_mutex_t *mutex_topics;
 } TDATA;
 
-/* =============== RESPONSES AND REQUESTS ============== */
+/* ===================== RESPONSES AND REQUESTS ======================= */
 
 /**
- * *Check if it's better to send the userData
- * Could use it to debug
+ * return -1 on an error
  */
 int sendResponse(int time, char *topic, char *text, userData user);
 
@@ -57,7 +57,7 @@ int sendResponse(int time, char *topic, char *text, userData user);
  */
 void signal_EndService(void *data);
 
-/* =============== HANDLING USERS ============== */
+/* ======================== HANDLING USERS ============================ */
 
 /**
  * TODO move this into a helper_users and refactor
@@ -65,6 +65,8 @@ void signal_EndService(void *data);
 void acceptUsers(void *data, userData user);
 
 /**
+ * @note does NOT need mutex_lock
+ *
  * Will remove the user from:
  * user_list and topic_list->subscribed_user
  */
@@ -74,46 +76,54 @@ void logoutUser(void *data, userData user);
  * Removes one user from subscribed_users
  * returns -1 if the user does NOT exist
  */
-int removeUserFromTopicList(userData *user_list, int *user_count, int pid);
+int removeUserFromUserList(userData *user_list, int *user_count, int pid);
+
 /**
  * Checks if the user is subscribed to any topic and removes it
- * returns -1 if the user is NOT subscribed to any topic
  */
-int removeUserFromAllTopics(topic *topic_list, int topic_count, int pid);
+void removeUserFromAllTopics(topic *topic_list, int *topic_count, int pid);
 /**
  * Updates the subscribed_user list and clears memory
  */
-void clearUserFromTopic(topic *current_topic, int index);
+void clearUserFromTopic(topic *topic_list, int index);
 
 void subscribeUser(userData user, char *topic, void *data);
+
 void unsubscribeUser(userData user, char *topic_name, void *data);
 
-/* =============== HANDLING TOPICS ============== */
+/* ========================= HANDLING TOPICS ========================== */
 
 /**
  * Function to guarantee that there's no trash information in the struct
  */
 void createNewTopic(topic *new_topic, char *topic_name, void *data);
 
-/* =============== HANDLING FILES ============== */
+/**
+ *
+ * @note persist_msg[message_index] from the current topic
+ */
+void removeExpiredMessage(int message_index, topic *current_topic);
 
-void getFromFile(void *data);
-void saveToFile(void *data);
+/**
+ * Removes the topic and clears the data
+ * returns 0 if it removed a topic
+ */
+int clearTopicIfEmpty(topic *topic_list, int *current_topics, int index);
 
-/* ============ UPDATING MESSAGE TIMERS ============== */
+/* ============= UPDATING MESSAGE TIMERS ================ */
 // TODO maybe use differente mutex
 
 // Handles updating, remove expired messages and topics
 void *updateMessageCounter(void *data);
-void decrementMessageTimers(topic *t);
 
-/**
- *
- * @note removes the message from persist_msg[message_index] from the current topic
- */
-void removeExpiredMessage(int message_index, topic *current_topic);
+void decrementMessageTimers(topic *current_topic);
 
-/* =============== TO BE REFACTORED ============== */
+/* ========================= HANDLING FILES =========================== */
+
+void getFromFile(void *data);
+void saveToFile(void *data);
+
+/* ======================== TO BE REFACTORED ========================== */
 
 void *handleFifoCommunication(void *data);
 
@@ -148,4 +158,7 @@ void unlockTopic(char *topic, void *data);
  */
 void writeTopicList(userData user, void *data);
 
+/**
+ * @note does NOT need mutex_lock
+ */
 void checkUserExistsAndLogOut(char *user, void *data);
