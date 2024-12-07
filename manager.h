@@ -5,9 +5,10 @@
 /**
  * @param topic string
  * @param subscribed_user_count int
- * @param user pid_t
+ * @param subscribed_users userData[]
  * @param persistent_msg_count int
- * @param persist_msg msgData
+ * @param persist_msg msgData[]
+ * @param is_topic_locked int
  *
  * @note Saves which users that subscribed a topic
  */
@@ -41,22 +42,40 @@ typedef struct
     pthread_mutex_t *m;
 } TDATA;
 
+/**
+ * TODO move this into a helper_users and refactor
+ */
 void acceptUsers(void *data, userData user);
 
 /**
  * @param msg msgData
  * @param pid int user to send message
+ *
+ * *Check if it's better to send the userData
+ * Could use it to debug
  */
 int sendResponse(msgData msg, int pid);
 
+/**
+ * TODO move this into a helper_users and refactor
+ * Will remove the user from:
+ * user_list and topic_list->subscribed_user
+ */
 void logoutUser(void *data, int pid);
 
 /**
+ * ?Send message
+ *
  * @note Sends a signal to all users that the manager is closing
  */
 void signal_EndService(void *data);
 
-void subscribeUser(void *data);
+void subscribeUser(userData user, char *topic, void *data);
+
+/**
+ * Function to guarantee that there's no trash information in the struct
+ */
+void createNewTopic(topic *new_topic, char *topic_name, void *data);
 
 void getFromFile(void *data);
 void saveToFile(void *data);
@@ -74,23 +93,36 @@ void removeExpiredMessage(int message_index, topic *current_topic);
 void cleanupEmptyTopic(topic *current_topic);
 
 void *handleFifoCommunication(void *data);
+
 /**
  * @param msg Log message to be used
  * @param data TDATA
  *
- * @remark Use "." to send no message
+ * Signals users to close |
+ * Saves data to files |
+ * Closes MANAGER_FIFO |
+ * Joins threads |
+ * Destroys mutex |
+ * Unlinks MANAGER_FIFO |
  *
- * @note Terminates the program
+ * @note Use "." to send NO message
  */
 void closeService(char *msg, void *data);
 
 // Functions to handle admin commands
-void showTopic(void *data, char *topic);
+void showPersistantMessagesInTopic(char *topic, void *data);
 
 //* Refactor into a single function
-void lockTopic(void *data, char *topic);
-void unlockTopic(void *data, char *topic);
+void lockTopic(char *topic, void *data);
+void unlockTopic(char *topic, void *data);
 
-void writeTopicList(int fd, void *data);
+/**
+ * Sends 1 string with all the topics
+ * separated by '\n'
+ * and terminated by '\0'
+ *
+ * @note Send the topic list to the user
+ */
+void writeTopicList(int pid, void *data);
 
-void checkUserExistsAndLogOut(void *data, char *user);
+void checkUserExistsAndLogOut(char *user, void *data);

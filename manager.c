@@ -10,7 +10,7 @@ int main()
 
     // Signal to remove the pipe
     struct sigaction sa;
-    sa.sa_sigaction = handle_OverrideCancel;
+    sa.sa_sigaction = handleOverrideCancel;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
 
@@ -21,8 +21,6 @@ int main()
     data.stop = 0;
     data.current_users = 0;
     data.current_topics = 0;
-    data.topic_list->persistent_msg_count = 0;
-    data.topic_list->subscribed_user_count = 0;
 
     /* ================= READ THE FILE ==================== */
     getFromFile(&data);
@@ -85,7 +83,21 @@ int main()
         }
         else if (strcmp(command, "topics") == 0)
         {
-            writeTopicList(STDOUT_FILENO, &data);
+            pthread_mutex_lock(data.m);
+            if (data.current_topics <= 0)
+            {
+
+                printf("No topics created.\n");
+                pthread_mutex_unlock(data.m);
+                return;
+            }
+            printf("Current topics:\n");
+            for (int i = 0; i < data.current_topics; i++)
+                printf("%d: %s with %d users subscribed.\n",
+                       i + 1,
+                       data.topic_list[i].topic,
+                       data.topic_list[i].subscribed_user_count);
+            pthread_mutex_unlock(data.m);
         }
         else if (strcmp(command, "remove") == 0)
         {
@@ -103,7 +115,7 @@ int main()
                 printf("%s <topic>\nPress help for available commands.\n", command);
                 continue;
             }
-            showTopic(&data, param);
+            showPersistantMessagesInTopic(param, &data);
         }
         else if (strcmp(command, "lock") == 0)
         {
@@ -143,30 +155,61 @@ int main()
     exit(EXIT_SUCCESS);
 }
 
-void writeTopicList(int fd, void *data)
+void writeTopicList(int pid, void *data)
 {
-
-    // TODO use the function write to send to the fd
-    //  which for the manager is STDOUT
-    //  for the user is their fd
     TDATA *pdata = (TDATA *)data;
+    msgData msg;
+    int msg_size = TOPIC_MAX_SIZE * TOPIC_MAX_SIZE;
+    char str[msg_size];
+    char FEED_FIFO_FINAL[100];
+    sprintf(FEED_FIFO_FINAL, FEED_FIFO, pid);
+
     pthread_mutex_lock(pdata->m);
     if (pdata->current_topics <= 0)
     {
-        printf("No topics created.\n");
         pthread_mutex_unlock(pdata->m);
+        strcpy(msg.text, "There are no topics. Feel free to create one!");
+        strcpy(msg.topic, "Info");
+        strcpy(msg.user, "[Server]");
+        sendResponse(msg, pid);
         return;
     }
-    printf("Current topics:\n");
-    for (int i = 0; i < pdata->current_topics; i++)
-        printf("%d: %s with %d users subscribed.\n",
-               i + 1,
-               pdata->topic_list[i].topic,
-               pdata->topic_list[i].subscribed_user_count);
+
+    int fd = open(FEED_FIFO_FINAL, O_WRONLY);
+    if (fd == -1)
+    {
+        printf("[Error %d]\n Unable to open the feed pipe to answer.\n", errno);
+        return 0;
+    }
+
     pthread_mutex_unlock(pdata->m);
+
+    // Sending as one string in a msgData will occur bugs when the
+    // current_topics > 15
+    // would need to change \0 to \n if done with this solution
+
+    // By sending 20 msgs back to back
+    // there is a chance of the user receiving a message
+    // from another user, while in the middle of printing the topic list
+
+    topicList msg_list;
+    pthread_mutex_lock(pdata->m);
+    msg_list.num_topics = pdata->current_topics;
+    for (int i = 1; i < pdata->current_topics; i++)
+    {
+        strcpy(msg_list.topic_list[i], &pdata->topic_list[i].topic);
+        sprintf("%s", msg_list.topic_list[i]);
+    }
+    pthread_mutex_unlock(pdata->m);
+
+    if (write(fd, &msg_list, sizeof(msg_list)) < 0)
+    {
+        printf("[Error] Unable to send the topic list to the user.\n");
+    }
+    close(fd);
 }
 
-void showTopic(void *data, char *topic)
+void showPersistantMessagesInTopic(char *topic, void *data)
 {
     TDATA *pdata = (TDATA *)data;
     pthread_mutex_lock(pdata->m);
@@ -185,12 +228,13 @@ void showTopic(void *data, char *topic)
             return;
         }
     }
-    printf("No topic <%s> was found.\n", topic);
     pthread_mutex_unlock(pdata->m);
+    printf("No topic <%s> was found.\n", topic);
     return;
 }
 
-void unlockTopic(void *data, char *topic)
+void unlockTopic(char *topic, void *data)
+
 {
     TDATA *pdata = (TDATA *)data;
     pthread_mutex_lock(pdata->m);
@@ -208,7 +252,7 @@ void unlockTopic(void *data, char *topic)
     return;
 }
 
-void lockTopic(void *data, char *topic)
+void lockTopic(char *topic, void *data)
 {
     TDATA *pdata = (TDATA *)data;
     pthread_mutex_lock(pdata->m);
@@ -226,7 +270,7 @@ void lockTopic(void *data, char *topic)
     return;
 }
 
-void checkUserExistsAndLogOut(void *data, char *user)
+void checkUserExistsAndLogOut(char *user, void *data)
 {
     TDATA *pdata = (TDATA *)data;
     union sigval val;
@@ -247,6 +291,7 @@ void checkUserExistsAndLogOut(void *data, char *user)
     return;
 }
 
+// TODO refactor into smaller function calls
 void *handleFifoCommunication(void *data)
 {
     char error_msg[100];
@@ -323,7 +368,7 @@ void *handleFifoCommunication(void *data)
             {
                 printf("[Warning] Nothing was read from the pipe - Login\n");
             }
-            size = read(fd, &user, sizeof(userData));
+            size = read(fd, topic_name, TOPIC_MAX_SIZE);
             if (size < 0)
             {
                 sprintf(error_msg,
@@ -334,7 +379,10 @@ void *handleFifoCommunication(void *data)
             if (size == 0)
             {
                 printf("[Warning] Nothing was read from the pipe - Login\n");
+                continue;
             }
+
+            subscribeUser(user, topic_name, &data);
             break;
         case MESSAGE:
             break;
@@ -429,6 +477,7 @@ int sendResponse(msgData msg, int pid)
 
 void logoutUser(void *data, int pid)
 {
+
     TDATA *pdata = (TDATA *)data;
     pthread_mutex_lock(pdata->m);
     // Removes the user from the logged list
@@ -471,9 +520,47 @@ void logoutUser(void *data, int pid)
     return;
 }
 
-void subscribeUser(void *data)
+void subscribeUser(userData user, char *topic_name, void *data)
 {
     TDATA *pdata = (TDATA *)data;
+    //* Maybe guarantee that it also exists on user_list
+
+    int i;
+    pthread_mutex_lock(pdata->m);
+    int last_topic = pdata->current_topics;
+    int last_user;
+    for (i = 0; i < last_topic; i++)
+    {
+        if (strcmp(topic_name, pdata->topic_list[i].topic) == 0)
+        {
+            last_user = pdata->topic_list[i].subscribed_user_count;
+            memcpy(&pdata->topic_list[i].subscribed_users[last_user - 1],
+                   &user, sizeof(userData));
+            pdata->topic_list[i].subscribed_user_count++;
+            pthread_mutex_unlock(pdata->m);
+            return;
+        }
+    }
+    createNewTopic(&pdata->topic_list[pdata->current_topics], topic_name, data);
+    last_user = pdata->topic_list[last_topic].subscribed_user_count;
+
+    memcpy(&pdata->topic_list[last_topic]
+                .subscribed_users[last_user - 1],
+           &user, sizeof(userData));
+
+    pdata->topic_list[last_topic].subscribed_user_count++;
+    pdata->current_topics++;
+
+    pthread_mutex_unlock(pdata->m);
+    return;
+}
+
+void createNewTopic(topic *new_topic, char *topic_name, void *data)
+{
+    new_topic->is_topic_locked = 0;
+    strcpy(new_topic->topic, topic_name);
+    new_topic->persistent_msg_count = 0;
+    new_topic->subscribed_user_count = 0;
 }
 
 void closeService(char *msg, void *data)
@@ -493,10 +580,8 @@ void closeService(char *msg, void *data)
     msgType type = -1;
     // Unblocks the read
     write(pdata->fd_manager, &type, sizeof(msgType));
-    if (pthread_join(t[0], NULL) == EDEADLK)
-        printf("[Warning] Deadlock when closing the thread for the timer\n");
-    if (pthread_join(t[1], NULL) == EDEADLK)
-        printf("[Warning] Deadlock when closing the thread for input\n");
+    pthread_join(t[0], NULL);
+    pthread_join(t[1], NULL);
     pthread_mutex_destroy(&mutex);
     close(pdata->fd_manager);
     unlink(MANAGER_FIFO);
