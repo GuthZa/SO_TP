@@ -10,7 +10,7 @@ int main()
 
     // Signal to remove the pipe
     struct sigaction sa;
-    sa.sa_sigaction = handle_closeService;
+    sa.sa_sigaction = handle_OverrideCancel;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
 
@@ -50,7 +50,6 @@ int main()
     do
     {
         read(STDIN_FILENO, msg, MSG_MAX_SIZE);
-        //! Is giving seg fault when only has \n as input
         REMOVE_TRAILING_ENTER(msg);
         // Divides the input of the user in multiple strings
         // Similar to the way argv is handled
@@ -58,7 +57,10 @@ int main()
         if (command != NULL)
             param = strtok(NULL, " ");
         else
+        {
+            printf("Press help for help.\n");
             continue;
+        }
 
         if (strcmp(command, "close") == 0)
         {
@@ -83,20 +85,13 @@ int main()
         }
         else if (strcmp(command, "topics") == 0)
         {
-            pthread_mutex_lock(data.m);
-            printf("Current topics:\n");
-            for (int i = 0; i < data.current_topics; i++)
-                printf("%d: %s with %d users subscribed.\n",
-                       i + 1,
-                       data.topic_list[i].topic,
-                       data.topic_list[i].subscribed_user_count);
-            pthread_mutex_unlock(data.m);
+            writeTopicList(STDOUT_FILENO, &data);
         }
         else if (strcmp(command, "remove") == 0)
         {
             if (param == NULL)
             {
-                printf("%s <username>\nPress help for available comands.", command);
+                printf("%s <username>\nPress help for available commands.\n", command);
                 continue;
             }
             checkUserExistsAndLogOut(&data, param);
@@ -105,7 +100,7 @@ int main()
         {
             if (param == NULL)
             {
-                printf("%s <topic>\nPress help for available comands.", command);
+                printf("%s <topic>\nPress help for available commands.\n", command);
                 continue;
             }
             showTopic(&data, param);
@@ -114,7 +109,7 @@ int main()
         {
             if (param == NULL)
             {
-                printf("%s <topic>\nPress help for a list of available comands.", command);
+                printf("%s <topic>\nPress help for available commands.\n", command);
                 continue;
             }
             lockTopic(&data, param);
@@ -123,7 +118,7 @@ int main()
         {
             if (param == NULL)
             {
-                printf("%s <topic>\nPress help for a list of available commands.", command);
+                printf("%s <topic>\nPress help for available commands.\n", command);
                 continue;
             }
             lockTopic(&data, param);
@@ -146,6 +141,29 @@ int main()
     } while (1);
 
     exit(EXIT_SUCCESS);
+}
+
+void writeTopicList(int fd, void *data)
+{
+
+    // TODO use the function write to send to the fd
+    //  which for the manager is STDOUT
+    //  for the user is their fd
+    TDATA *pdata = (TDATA *)data;
+    pthread_mutex_lock(pdata->m);
+    if (pdata->current_topics <= 0)
+    {
+        printf("No topics created.\n");
+        pthread_mutex_unlock(pdata->m);
+        return;
+    }
+    printf("Current topics:\n");
+    for (int i = 0; i < pdata->current_topics; i++)
+        printf("%d: %s with %d users subscribed.\n",
+               i + 1,
+               pdata->topic_list[i].topic,
+               pdata->topic_list[i].subscribed_user_count);
+    pthread_mutex_unlock(pdata->m);
 }
 
 void showTopic(void *data, char *topic)
@@ -451,35 +469,6 @@ void logoutUser(void *data, int pid)
     }
     pthread_mutex_unlock(pdata->m);
     return;
-}
-
-void *updateMessageCounter(void *data)
-{
-    TDATA *pdata = (TDATA *)data;
-    do
-    {
-        pthread_mutex_lock(pdata->m);
-        for (int j = 0; j < pdata->current_topics; j++)
-        {
-            for (int i = 0; i < pdata->topic_list[j].persistent_msg_count; i++)
-            {
-                if (--pdata->topic_list[j].persist_msg[i].time <= 0)
-                {
-                    if (i < pdata->topic_list[j].persistent_msg_count - 1)
-                        memcpy(&pdata->topic_list[j].persist_msg[i],
-                               &pdata->topic_list[j].persist_msg
-                                    [pdata->topic_list[j].persistent_msg_count - 1],
-                               sizeof(msgData));
-                    memset(&pdata->topic_list[j].persist_msg
-                                [pdata->topic_list[j].persistent_msg_count - 1],
-                           0, sizeof(msgData));
-                }
-            }
-        }
-        pthread_mutex_unlock(pdata->m);
-        sleep(1);
-    } while (!pdata->stop);
-    pthread_exit(NULL);
 }
 
 void subscribeUser(void *data)

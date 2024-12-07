@@ -115,4 +115,4 @@ void createFifo(char *fifo);
 /**
  * @note overrides the Ctrl + C signal base
  */
-void handle_closeService(int s, siginfo_t *i, void *v);
+void handle_OverrideCancel(int s, siginfo_t *i, void *v);
