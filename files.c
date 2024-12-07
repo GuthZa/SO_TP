@@ -32,7 +32,7 @@ void getFromFile(void *data)
                 topic_count++;
             else
                 firstLine = 0;
-            strcpy(pdata->topic_list[topic_count].topic, temp_topic);
+            createNewTopic(&pdata->topic_list[topic_count], temp_topic, data);
             msg_count = 0;
         }
 

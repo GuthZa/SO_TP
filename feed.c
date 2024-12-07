@@ -16,7 +16,7 @@ int main()
 
     /* ========================== SIGNALS ======================= */
     struct sigaction sa;
-    sa.sa_sigaction = handle_OverrideCancel;
+    sa.sa_sigaction = handleOverrideCancel;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
 
