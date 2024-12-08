@@ -3,6 +3,7 @@
 //? Maybe refactor to use the pipes
 void checkUserExistsAndLogOut(char *user, void *data)
 {
+    //! WARN OTHER USERS
     TDATA *pdata = (TDATA *)data;
     userData userToRemove;
     userToRemove.pid = 0;
@@ -16,6 +17,9 @@ void checkUserExistsAndLogOut(char *user, void *data)
     {
         if (strcmp(pdata->user_list[i].name, user) == 0)
         {
+            printf("Remove user [%s] with pid %d\n",
+                   pdata->user_list[i].name,
+                   pdata->user_list[i].pid);
             userToRemove = pdata->user_list[i];
         }
     }

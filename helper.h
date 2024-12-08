@@ -24,9 +24,10 @@
 // To remove '\n' from the string
 #define REMOVE_TRAILING_ENTER(str) str[strcspn(str, "\n")] = '\0'
 
-// Already accounts for the '\0'
+// Calculates the size of msgData, already accounts for the '\0'
 #define CALCULATE_MSGDATA_SIZE(str) TOPIC_MAX_SIZE + USER_MAX_SIZE + sizeof(int) + strlen(str) + 1
 
+// Calculates the size of messageStruct
 #define CALCULATE_MSG_SIZE(msgData_size) sizeof(msgType) + sizeof(userData) + sizeof(int) + msgData_size
 
 // Used to wrap each message

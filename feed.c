@@ -60,29 +60,32 @@ int main()
         closeService("Thread setup failed", &data);
 
     /* ====================== SERVICE START ======================== */
-    char command[MSG_MAX_SIZE];
-    int size;
+
+    char command[400], *args[4], *tok;
+    int size = 0;
 
     do
     {
-        size = scanf("%s %s %d %s",
-                     command,
-                     msg.topic,
-                     &msg.time,
-                     msg.text);
-        printf("%s", command);
-        if (size == 0)
+        if (read(STDIN_FILENO, command, 400) < 0)
         {
-            printf("Please write help for a list of commands\n");
-            continue;
+            closeService("Error while receiving input", &data);
         }
-
-        if (strcmp(command, "exit") == 0)
+        tok = strtok(command, " ");
+        while (tok != NULL)
         {
-            sendRequest(LOGOUT, &data);
+            args[size++] = tok;
+            tok = strtok(NULL, " ");
+            if (size > 2)
+                break;
+        }
+        REMOVE_TRAILING_ENTER(args[size - 1]);
+        printf("%s", args[3]);
+
+        if (strcmp(args[0], "exit") == 0)
+        {
             closeService("Logging off...\n", &data);
         }
-        if (strcmp(command, "msg") == 0)
+        if (strcmp(args[0], "msg") == 0)
         {
             if (size < 4)
             {
@@ -91,11 +94,11 @@ int main()
                 continue;
             }
 
-            sendMessage(msg, &data);
+            sendMessage(args[1], atoi(args[2]), args[3], &data);
         }
-        else if (strcmp(command, "subscribe") == 0)
+        else if (strcmp(args[0], "subscribe") == 0)
         {
-            if (size != 2)
+            if (size < 2)
             {
                 printf("Invalid command\n");
                 printf("%s <topic>\n", command);
@@ -109,24 +112,24 @@ int main()
             //     sendSubscribeUnsubscribe(SUBSCRIBE, msg.topic, &data);
             // }
 
-            sendSubscribeUnsubscribe(SUBSCRIBE, msg.topic, &data);
+            sendSubscribeUnsubscribe(SUBSCRIBE, args[1], &data);
         }
-        else if (strcmp(command, "unsubscribe") == 0)
+        else if (strcmp(args[0], "unsubscribe") == 0)
         {
-            if (size != 2)
+            if (size < 2)
             {
                 printf("Invalid command\n");
                 printf("%s <topic>\n", command);
                 continue;
             }
 
-            sendSubscribeUnsubscribe(UNSUBSCRIBE, msg.topic, &data);
+            sendSubscribeUnsubscribe(UNSUBSCRIBE, args[1], &data);
         }
-        else if (strcmp(command, "topics") == 0)
+        else if (strcmp(args[0], "topics") == 0)
         {
             sendRequest(LIST, &data);
         }
-        else if (strcmp(command, "help") == 0)
+        else if (strcmp(args[0], "help") == 0)
         {
             printf("topics - Lists the existing topics\n");
             printf("msg <topic> <duration> \"message\" - To send a message to the <topic>\n\tUse 0 for non-persistent messages\n");
@@ -134,6 +137,11 @@ int main()
             printf("unsubscribe <topic> - To stop receiving messages from the <topic>\n");
             printf("exit - closes the app\n");
         }
+        // Reseting user input
+        for (int i = 0; i < 4; i++)
+            args[4] = "\0";
+        tok = "\0";
+        size = 0;
     } while (1);
     exit(EXIT_SUCCESS);
 }
@@ -169,7 +177,6 @@ void *handleFifoCommunication(void *data)
                 strcmp(resp.topic, "Close") == 0)
                 closeService("", data);
         }
-
     } while (!pdata->stop);
 
     close(pdata->fd_feed);
@@ -221,7 +228,7 @@ void sendSubscribeUnsubscribe(msgType type, char *topic, void *data)
     return;
 }
 
-void sendMessage(msgData msg_data, void *data)
+void sendMessage(char *topic, int time, char *text, void *data)
 {
     TDATA *pdata = (TDATA *)data;
     messageStruct msg_struct;
@@ -232,9 +239,13 @@ void sendMessage(msgData msg_data, void *data)
 
     msg_struct.type = MESSAGE;
     msg_struct.user = pdata->user;
-    msg_struct.message = msg_data;
+    strcpy(msg_struct.message.text, text);
+    strcpy(msg_struct.message.topic, topic);
+    memcpy(&msg_struct.message.time, &time, sizeof(int));
+    strcpy(msg_struct.message.user, pdata->user.name);
+    memcpy(&msg_struct.user, &pdata->user, sizeof(userData));
     // Calculate message size
-    msg_struct.msg_size = CALCULATE_MSGDATA_SIZE(msg_data.text);
+    msg_struct.msg_size = CALCULATE_MSGDATA_SIZE(text);
     size = CALCULATE_MSG_SIZE(msg_struct.msg_size);
     if (write(fd, &msg_struct, size) < 0)
     {
@@ -255,9 +266,16 @@ void closeService(char *msg, void *data)
 {
     TDATA *pdata = (TDATA *)data;
 
-    printf("Stopping background processes...\n");
+    printf("[Error] Code: {%d}\n", errno);
+    printf("%s\n", msg);
+
     pdata->stop = 1;
+
+    printf("Warning manager of closing...\n");
+    sendRequest(LOGOUT, data);
+
     int i = 0;
+    printf("Stopping background processes...\n");
 
     // Unblocks the read
     write(pdata->fd_feed, &i, sizeof(int));

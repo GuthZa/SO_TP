@@ -42,13 +42,13 @@ int main(int argc, char **argv)
         closeService("Thread setup failed - Fifo Communication", &data);
 
     /* =================== SERVICE START ===================== */
-    char msg[MSG_MAX_SIZE]; // to save admin input
+    char msg[400]; // to save admin input
     char *param, *command;
     do
     {
-        if (read(STDIN_FILENO, msg, MSG_MAX_SIZE) < 0)
-        {
-        }
+        if (read(STDIN_FILENO, msg, 400) < 0)
+            closeService("Unable to read admin input", &data);
+
         REMOVE_TRAILING_ENTER(msg);
         // Divides the input of the user in multiple strings
         // Similar to the way argv is handled
@@ -148,7 +148,9 @@ int main(int argc, char **argv)
             if (data.isDev)
                 printf("Lock topics before locking topic\n");
             pthread_mutex_lock(data.mutex_topics);
+            //! SEND USERS A MESSAGE
             lockUnlockTopic(param, 1, &data);
+
             pthread_mutex_unlock(data.mutex_topics);
             if (data.isDev)
                 printf("Unlock topics after locking topic\n");
@@ -164,7 +166,9 @@ int main(int argc, char **argv)
             if (data.isDev)
                 printf("Lock topics before unlocking topic\n");
             pthread_mutex_lock(data.mutex_topics);
+            //! SEND USERS A MESSAGE
             lockUnlockTopic(param, 0, &data);
+
             pthread_mutex_unlock(data.mutex_topics);
             if (data.isDev)
                 printf("Unlock topics after unlocking topic\n");
@@ -409,11 +413,8 @@ void signal_EndService(void *data)
 void closeService(char *msg, void *data)
 {
     TDATA *pdata = (TDATA *)data;
-    if (strcmp(".", msg) == 0)
-    {
-        printf("[Error] Code: {%d}\n", errno);
-        printf("%s\n", msg);
-    }
+    printf("[Error] Code: {%d}\n", errno);
+    printf("%s\n", msg);
 
     pdata->stop = 1;
 
@@ -434,5 +435,5 @@ void closeService(char *msg, void *data)
     pthread_mutex_destroy(pdata->mutex_users);
     close(pdata->fd_manager);
     unlink(MANAGER_FIFO);
-    (strcmp(".", msg) == 0) ? exit(EXIT_SUCCESS) : exit(EXIT_FAILURE);
+    exit(EXIT_FAILURE);
 }
