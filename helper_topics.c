@@ -46,6 +46,7 @@ void subscribeUser(userData user, char *topic_name, void *data)
 
     int last_topic = pdata->current_topics;
     int last_user;
+
     for (int i = 0; i < last_topic; i++)
     {
         if (strcmp(topic_name, pdata->topic_list[i].topic) == 0)
@@ -166,7 +167,8 @@ void writeTopicList(userData user, void *data)
     int fd = open(FEED_FIFO_FINAL, O_WRONLY);
     if (fd == -1)
     {
-        printf("[Error %d] writeTopicList\n Unable to open the feed pipe to answer\n", errno);
+        printf("[Error] Code %d\n", errno);
+        printf("Unable to open the feed pipe: WriteTopic\n");
         return;
     }
 

@@ -11,6 +11,7 @@ void checkUserExistsAndLogOut(char *user, void *data)
     if (pdata->isDev)
         printf("Lock users before checking if user exists\n");
     pthread_mutex_lock(pdata->mutex_users);
+
     for (int i = 0; i < pdata->current_users; i++)
     {
         if (strcmp(pdata->user_list[i].name, user) == 0)
@@ -18,6 +19,7 @@ void checkUserExistsAndLogOut(char *user, void *data)
             userToRemove = pdata->user_list[i];
         }
     }
+
     pthread_mutex_unlock(pdata->mutex_users);
     if (pdata->isDev)
         printf("Unlock users after checking if user exists\n");
@@ -25,7 +27,7 @@ void checkUserExistsAndLogOut(char *user, void *data)
     if (userToRemove.pid != 0)
     {
         sigqueue(userToRemove.pid, SIGUSR2, val);
-        logoutUser(data, userToRemove);
+        logoutUser(userToRemove, data);
         return;
     }
 
@@ -33,7 +35,7 @@ void checkUserExistsAndLogOut(char *user, void *data)
     return;
 }
 
-void acceptUsers(void *data, userData user)
+void acceptUsers(userData user, void *data)
 {
     TDATA *pdata = (TDATA *)data;
     // Used to send a message to the user
@@ -68,7 +70,7 @@ void acceptUsers(void *data, userData user)
     return;
 }
 
-void logoutUser(void *data, userData user)
+void logoutUser(userData user, void *data)
 {
     TDATA *pdata = (TDATA *)data;
 

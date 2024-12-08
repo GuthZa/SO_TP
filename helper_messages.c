@@ -8,6 +8,7 @@ void *updateMessageCounter(void *data)
         if (pdata->isDev)
             printf("Lock topics before update time\n");
         pthread_mutex_lock(pdata->mutex_topics);
+
         if (pdata->isDev)
             printf("Decreasing time\n");
         for (int j = 0; j < pdata->current_topics; j++)

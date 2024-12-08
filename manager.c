@@ -226,6 +226,9 @@ void *handleFifoCommunication(void *data)
             printf("Unable to read from the fifo: Msg type\n");
             closeService(data);
         }
+
+        //* Move the validation inside the functions
+
         switch (type)
         {
         case LOGIN:
@@ -246,7 +249,7 @@ void *handleFifoCommunication(void *data)
                 printf("Lock users before login\n");
             pthread_mutex_lock(pdata->mutex_users);
 
-            acceptUsers(data, user);
+            acceptUsers(user, data);
 
             pthread_mutex_unlock(pdata->mutex_users);
             if (pdata->isDev)
@@ -265,7 +268,7 @@ void *handleFifoCommunication(void *data)
                 printf("[Warning] Nothing was read from the fifo: Logout\n");
             }
 
-            logoutUser(data, user);
+            logoutUser(user, data);
             break;
         case SUBSCRIBE:
             size = read(fd, &user, sizeof(userData));

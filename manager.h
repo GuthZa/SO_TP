@@ -64,9 +64,9 @@ void signal_EndService(void *data);
 /* ======================== HANDLING USERS ============================ */
 
 /**
- * TODO move this into a helper_users and refactor
+ *
  */
-void acceptUsers(void *data, userData user);
+void acceptUsers(userData user, void *data);
 
 /**
  * @note does NOT need mutex_lock
@@ -74,7 +74,7 @@ void acceptUsers(void *data, userData user);
  * Will remove the user from:
  * user_list and topic_list->subscribed_user
  */
-void logoutUser(void *data, userData user);
+void logoutUser(userData user, void *data);
 
 /**
  * Removes one user from the list and clears the memory
