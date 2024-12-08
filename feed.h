@@ -6,10 +6,9 @@ typedef struct
     int fd_feed;
     char fifoName[100];
     userData user;
-    pthread_mutex_t *m;
 } TDATA;
 
-/** Wrappper of userData to login
+/** Wrapper of userData to login
  * @param type enum with message type
  * @param user userData
  */
@@ -17,31 +16,26 @@ typedef struct
 {
     msgType type;
     userData user;
-} request;
+} requestStruct;
 
 /**
- * @param msg_struct msgStruct
- * @param error_msg *char
+ * Already calculates the size required | handles the fifo to write
  *
  * @return -1 if there was na error, 0 otherwise
- *
  */
-void sendMessage(void *data, char *msg);
-
-void sendSubscribeUnsubscribe(void *data, msgType type, char *topic);
-
-void sendRequest(void *data, msgType type);
+int sendMessage(msgData msg_data, userData user);
 
 /**
- * @param msg Log message to be used
- * @param fifo Pointer to the name of the fifo
- * @param fd1 File descriptor to close
+ * Already calculates the size required | handles the fifo to write
  *
- * @remark Use "." to send no message
- *
- * @note Terminates the program
+ * @return -1 if there was na error, 0 otherwise
  */
-void closeService(char *msg, void *data);
+int sendSubscribeUnsubscribe(msgType type, char *topic, userData user);
+
+/**
+ * @return -1 on an error, 0 otherwise
+ */
+int sendRequest(msgType type, userData user);
 
 void handle_closeService(int s, siginfo_t *i, void *v);
 

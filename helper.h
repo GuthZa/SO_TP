@@ -23,8 +23,11 @@
 
 // To remove '\n' from the string
 #define REMOVE_TRAILING_ENTER(str) str[strcspn(str, "\n")] = '\0'
+
 // Already accounts for the '\0'
-#define CALCULATE_MSG_SIZE(str) TOPIC_MAX_SIZE + USER_MAX_SIZE + sizeof(int) + strlen(str) + 1
+#define CALCULATE_MSGDATA_SIZE(str) TOPIC_MAX_SIZE + USER_MAX_SIZE + sizeof(int) + strlen(str) + 1
+
+#define CALCULATE_MSG_SIZE(msgData_size) sizeof(msgType) + sizeof(userData) + sizeof(int) + msgData_size
 
 // Used to wrap each message
 typedef enum
@@ -76,20 +79,20 @@ typedef struct
 } response;
 
 /**
- * @param type enum with message type
+ * @param type msgType enum with message type
  * @param user userData
  * @param msg_size int
- * @param msg string
+ * @param msg msgData
  *
  * @remark To send messages User -> Manager
  */
 typedef struct
 {
     msgType type;
-    int msg_size;
     userData user;
-    msgData msg;
-} message;
+    int msg_size;
+    msgData message;
+} messageStruct;
 
 /**
  * @param type enum with message type
@@ -127,3 +130,13 @@ void createFifo(char *fifo);
  * @note overrides the Ctrl + C signal base
  */
 void handleOverrideCancel(int s, siginfo_t *i, void *v);
+
+/**
+ * Signals users to close |
+ * Saves data to files |
+ * Closes FIFO |
+ * Joins threads |
+ * Destroys mutex |
+ * Unlinks FIFO |
+ */
+void closeService(void *data);

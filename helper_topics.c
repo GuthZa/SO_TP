@@ -92,7 +92,6 @@ void subscribeUser(userData user, char *topic_name, void *data)
 
 void unsubscribeUser(userData user, char *topic_name, void *data)
 {
-    //! IT IS SENDING THE USERNAME INCORRECTLY
     //* Maybe guarantee that it also exists on user_list
     TDATA *pdata = (TDATA *)data;
     char str[USER_MAX_SIZE];

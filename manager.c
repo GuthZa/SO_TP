@@ -5,7 +5,6 @@ pthread_t t[2];
 int main(int argc, char **argv)
 {
     setbuf(stdout, NULL);
-    char error_msg[100];
 
     // Signal to remove the pipe
     struct sigaction sa;
@@ -38,18 +37,16 @@ int main(int argc, char **argv)
     /* ================== START THREADS =================== */
     if (pthread_create(&t[0], NULL, &updateMessageCounter, &data) != 0)
     {
-        sprintf(error_msg,
-                "[Error] Code: {%d}\n Thread setup failed. \n",
-                errno);
-        closeService(error_msg, &data);
+        printf("[Error] Code: {%d}\n", errno);
+        printf(" Thread setup failed. \n");
+        closeService(&data);
     }
 
     if (pthread_create(&t[1], NULL, &handleFifoCommunication, &data) != 0)
     {
-        sprintf(error_msg,
-                "[Error] Code: {%d}\n Thread setup failed. \n",
-                errno);
-        closeService(error_msg, &data);
+        printf("[Error] Code: {%d}\n", errno);
+        printf("Thread setup failed. \n");
+        closeService(&data);
     }
 
     /* =================== SERVICE START ===================== */
@@ -73,7 +70,7 @@ int main(int argc, char **argv)
         if (strcmp(command, "close") == 0)
         {
             printf("\nClosing service...\n");
-            closeService(".", &data);
+            closeService(&data);
         }
         else if (strcmp(command, "users") == 0)
         {
@@ -211,14 +208,13 @@ void *handleFifoCommunication(void *data)
     int fd, size;
     userData user;
 
-    /* ================== SETUP THE PIPES ================== */
+    /* ================== SETUP THE FIFOS ================== */
     createFifo(MANAGER_FIFO);
     if ((fd = open(MANAGER_FIFO, O_RDWR)) == -1)
     {
-        sprintf(error_msg,
-                "[Error] Code: {%d}\n Unable to open the server pipe for reading - Setup\n",
-                errno);
-        closeService(error_msg, data);
+        printf("[Error] Code: {%d}\n", errno);
+        printf("Unable to open the fifo for reading\n");
+        closeService(data);
     }
     pdata->fd_manager = fd;
 
@@ -226,10 +222,9 @@ void *handleFifoCommunication(void *data)
     {
         if (read(fd, &type, sizeof(msgType)) < 0)
         {
-            sprintf(error_msg,
-                    "[Error] Code: {%d}\n Unable to read from the server pipe - Type\n",
-                    errno);
-            closeService(error_msg, data);
+            printf("[Error] Code: {%d}\n", errno);
+            printf("Unable to read from the fifo: Msg type\n");
+            closeService(data);
         }
         switch (type)
         {
@@ -237,18 +232,22 @@ void *handleFifoCommunication(void *data)
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
-                sprintf(error_msg,
-                        "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
-                        errno);
-                closeService(error_msg, data);
+                printf("[Error] Code: {%d}\n", errno);
+                printf("Unable to read from the fifo: Login\n");
+                closeService(data);
             }
             if (size == 0)
-                printf("[Warning] Nothing was read from the pipe - Login\n");
+            {
+                printf("[Warning] Nothing was read from the fifo: Login\n");
+                continue;
+            }
 
             if (pdata->isDev)
                 printf("Lock users before login\n");
             pthread_mutex_lock(pdata->mutex_users);
+
             acceptUsers(data, user);
+
             pthread_mutex_unlock(pdata->mutex_users);
             if (pdata->isDev)
                 printf("Unlock users after login\n");
@@ -257,46 +256,50 @@ void *handleFifoCommunication(void *data)
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
-                sprintf(error_msg,
-                        "[Error] Code: {%d}\n Unable to read from the server pipe - Logout\n",
-                        errno);
-                closeService(error_msg, data);
+                printf("[Error] Code: {%d}\n", errno);
+                printf("Unable to read from the fifo: Logout\n");
+                closeService(data);
             }
             if (size == 0)
-                printf("[Warning] Nothing was read from the pipe - Logout\n");
+            {
+                printf("[Warning] Nothing was read from the fifo: Logout\n");
+            }
+
             logoutUser(data, user);
             break;
         case SUBSCRIBE:
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
-                sprintf(error_msg,
-                        "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
-                        errno);
-                closeService(error_msg, data);
+                printf("[Error] Code: {%d}\n", errno);
+                printf("Unable to read from the fifo: Subscribe\n");
+                closeService(data);
             }
             if (size == 0)
             {
-                printf("[Warning] Nothing was read from the pipe - Login\n");
+                printf("[Warning] Nothing was read from the fifo: Subscribe\n");
+                continue;
             }
+
             // reads the topic
             size = read(fd, error_msg, TOPIC_MAX_SIZE);
             if (size < 0)
             {
-                sprintf(error_msg,
-                        "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
-                        errno);
-                closeService(error_msg, data);
+                printf("[Error] Code: {%d}\n", errno);
+                printf("Unable to read from the fifo: Subscribe\n");
+                closeService(data);
             }
             if (size == 0)
             {
-                printf("[Warning] Nothing was read from the pipe - Login\n");
+                printf("[Warning] Nothing was read from the fifo: Login\n");
                 continue;
             }
             if (pdata->isDev)
                 printf("Lock topics before subscribe to topic\n");
             pthread_mutex_lock(pdata->mutex_topics);
+
             subscribeUser(user, error_msg, data);
+
             pthread_mutex_unlock(pdata->mutex_topics);
             if (pdata->isDev)
                 printf("Unlock topics after subscribe to topic\n");
@@ -305,60 +308,109 @@ void *handleFifoCommunication(void *data)
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
-                sprintf(error_msg,
-                        "[Error] Code: {%d}\n Unable to read from the server pipe - Subscribe\n",
-                        errno);
-                closeService(error_msg, data);
+                printf("[Error] Code: {%d}\n", errno);
+                printf("Unable to read from the fifo: Unsubscribe\n");
+                closeService(data);
             }
             if (size == 0)
             {
-                printf("[Warning] Nothing was read from the pipe - Subscribe\n");
+                printf("[Warning] Nothing was read from the fifo: Unsubscribe\n");
+                continue;
             }
             size = read(fd, error_msg, TOPIC_MAX_SIZE);
             if (size < 0)
             {
-                sprintf(error_msg,
-                        "[Error] Code: {%d}\n Unable to read from the server pipe - Subscribe\n",
-                        errno);
-                closeService(error_msg, data);
+                printf("[Error] Code: {%d}\n", errno);
+                printf("Unable to read from the fifo: Unsubscribe\n");
+                closeService(data);
             }
             if (size == 0)
             {
-                printf("[Warning] Nothing was read from the pipe - Login\n");
+                printf("[Warning] Nothing was read from the fifo: Login\n");
                 continue;
             }
             if (pdata->isDev)
                 printf("Lock topics before unsubscribe topic\n");
             pthread_mutex_lock(pdata->mutex_topics);
+
             unsubscribeUser(user, error_msg, data);
+
             pthread_mutex_unlock(pdata->mutex_topics);
             if (pdata->isDev)
                 printf("Unlock topics after unsubscribe topic\n");
         case MESSAGE:
+            msgData msg;
+            int msg_size;
+
+            size = read(fd, &msg_size, sizeof(int));
+            if (size < 0)
+            {
+                printf("[Error] Code: {%d}\n", errno);
+                printf("Unable to read from the fifo: Message\n");
+                closeService(data);
+            }
+            if (size == 0)
+            {
+                printf("[Warning] Nothing was read from the fifo: Message\n");
+                continue;
+            }
+
+            size = read(fd, &user, sizeof(userData));
+            if (size < 0)
+            {
+                printf("[Error] Code: {%d}\n", errno);
+                printf("Unable to read from the fifo: Message\n");
+                closeService(data);
+            }
+            if (size == 0)
+            {
+                printf("[Warning] Nothing was read from the fifo: Message\n");
+                continue;
+            }
+
+            size = read(fd, &msg, sizeof(msgData));
+            if (size < 0)
+            {
+                printf("[Error] Code: {%d}\n", errno);
+                printf("Unable to read from the fifo: Message\n");
+                closeService(data);
+            }
+            if (size == 0)
+            {
+                printf("[Warning] Nothing was read from the fifo: Message\n");
+                continue;
+            }
+
+            //* send messages to user because empty data
+
+            printf("text: %s\n", msg.text);
+            printf("topic: %s\n", msg.topic);
+            printf("user: %s\n", msg.user);
+            printf("time: %d\n", msg.time);
             break;
         case LIST:
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
-                sprintf(error_msg,
-                        "[Error] Code: {%d}\n Unable to read from the server pipe - Login\n",
-                        errno);
-                closeService(error_msg, data);
+                printf("[Error] Code: {%d}\n", errno);
+                printf("Unable to read from the fifo: List\n");
+                closeService(data);
             }
             if (size == 0)
             {
-                printf("[Warning] Nothing was read from the pipe - Login\n");
+                printf("[Warning] Nothing was read from the fifo: List\n");
+                continue;
             }
             if (pdata->isDev)
                 printf("Lock topic before write topics to user\n");
             pthread_mutex_lock(pdata->mutex_topics);
+
             writeTopicList(user, data);
+
             pthread_mutex_unlock(pdata->mutex_topics);
             if (pdata->isDev)
                 printf("Unlock after write topics to user\n");
             break;
-        default:
-            type = -1;
         }
         type = -1;
     } while (!pdata->stop);
@@ -376,18 +428,19 @@ void signal_EndService(void *data)
     if (pdata->isDev)
         printf("Locking users to signal user\n");
     pthread_mutex_lock(pdata->mutex_users);
+
     for (int j = 0; j < pdata->current_users; j++)
         sigqueue(pdata->user_list[j].pid, SIGUSR2, val);
+
     pthread_mutex_unlock(pdata->mutex_users);
     if (pdata->isDev)
         printf("Unlock users to signal user\n");
 }
 
-void closeService(char *msg, void *data)
+void closeService(void *data)
 {
     TDATA *pdata = (TDATA *)data;
-    if (strcmp(".", msg) != 0)
-        printf("%s\n", msg);
+
     pdata->stop = 1;
 
     printf("Signaling users end of service...\n");
@@ -407,5 +460,5 @@ void closeService(char *msg, void *data)
     pthread_mutex_destroy(pdata->mutex_users);
     close(pdata->fd_manager);
     unlink(MANAGER_FIFO);
-    strcmp(msg, ".") == 0 ? exit(EXIT_SUCCESS) : exit(EXIT_FAILURE);
+    exit(EXIT_SUCCESS);
 }

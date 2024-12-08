@@ -2,7 +2,6 @@
 
 pthread_t t;
 TDATA data;
-pthread_mutex_t mutex; // criar a variavel mutex
 
 int main()
 {
@@ -10,9 +9,9 @@ int main()
     // Instead of waiting to fill the buffer
     setbuf(stdout, NULL);
 
-    char error_msg[100];
-    char message[MSG_MAX_SIZE] = "\0";
-    char *command, *param;
+    msgData msg;
+    char command[10];
+    int size;
 
     /* ========================== SIGNALS ======================= */
     struct sigaction sa;
@@ -35,26 +34,19 @@ int main()
 
     /* =================== HANDLES LOGIN ===================== */
     printf("\nHello!\n\nPlease enter your username: ");
-    read(STDIN_FILENO, message, USER_MAX_SIZE);
-
-    REMOVE_TRAILING_ENTER(message);
-    command = strtok(message, " ");
-    if ((command == NULL) || ((param = strtok(NULL, " ")) != NULL))
+    if (scanf("%s", data.user.name) > 1)
     {
-        printf("Please write a valid username.\n");
+        printf("Please write a username with no spaces.");
         exit(EXIT_FAILURE);
     }
 
-    if (strcmp(message, "exit") == 0)
+    REMOVE_TRAILING_ENTER(data.user.name);
+    if (strcmp(data.user.name, "exit") == 0)
         exit(EXIT_SUCCESS);
 
-    // inicializar a variavel mutex
-    pthread_mutex_init(&mutex, NULL);
-    data.m = &mutex;
-
     // Fill data from user
-    strcpy(data.user.name, message);
     data.user.pid = getpid();
+    strcpy(msg.user, data.user.name);
 
     /* =============== SETUP THE PIPES & LOGIN ===================== */
     // Checks there's a pipe with the same pid or creates one
@@ -62,55 +54,63 @@ int main()
     createFifo(data.fifoName);
 
     printf("\nAwaiting confirmation for log in...\n");
-    sendRequest(&data, LOGIN);
+    if (sendRequest(LOGIN, data.user) == -1)
+    {
+        closeService(&data);
+    }
 
     if ((data.fd_feed = open(data.fifoName, O_RDWR)) < 0)
     {
-        strcpy(error_msg, "[Error] Unable to open the server pipe for reading.\n");
-        pthread_mutex_destroy(&mutex);
+        printf("[Error] Unable to open the server pipe for reading.\n");
         exit(EXIT_FAILURE);
     }
 
     if (pthread_create(&t, NULL, &handleFifoCommunication, &data) != 0)
     {
-        sprintf(error_msg,
-                "[Error] Code: {%d}\n Thread setup failed. \n",
-                errno);
-        closeService(error_msg, &data);
+        printf("[Error] Code: {%d}\n");
+        printf("Thread setup failed. \n", errno);
+        closeService(&data);
     }
 
     /* ====================== SERVICE START ======================== */
+    
     do
     {
-        read(STDIN_FILENO, message, MSG_MAX_SIZE);
-        REMOVE_TRAILING_ENTER(message);
-        command = strtok(message, " ");
-        if (command != NULL)
-            param = strtok(NULL, " ");
-        else
+        size = scanf("%s %s %d %s",
+                     command,
+                     msg.topic,
+                     &msg.time,
+                     msg.text);
+        printf("%s", command);
+        if (size == 0)
+        {
+            printf("Please write help for a list of commands\n");
             continue;
+        }
 
-        /* =============== CHECK COMMAND VALIDITY =================== */
         if (strcmp(command, "exit") == 0)
         {
             printf("Logging off...\n");
-            sendRequest(&data, LOGOUT);
-            closeService(".", &data);
+            sendRequest(LOGOUT, data.user);
+            closeService(&data);
         }
         if (strcmp(command, "msg") == 0)
         {
-            if (param == NULL)
+            if (size < 4)
             {
-                printf("Invalid command msg <topic> <duration> <message>\n");
+                printf("Invalid command\n");
+                printf("%s <topic> <duration> <message>\n", command);
                 continue;
             }
-            sendMessage(&data, param);
+            if (sendMessage(msg, data.user) == -1)
+                closeService(&data);
         }
         else if (strcmp(command, "subscribe") == 0)
         {
-            if (param == NULL)
+            if (size != 2)
             {
-                printf("Invalid command msg <topic> <duration> <message>\n");
+                printf("Invalid command\n");
+                printf("%s <topic>\n", command);
                 continue;
             }
 
@@ -118,40 +118,36 @@ int main()
             // for (int i = 0; i < 20; i++)
             // {
             //     sprintf(param, "%c", (c + i));
-            //     sendSubscribeUnsubscribe(&data, SUBSCRIBE, param);
+            //     sendSubscribeUnsubscribe(SUBSCRIBE, msg.topic, &data);
             // }
 
-            sendSubscribeUnsubscribe(&data, SUBSCRIBE, param);
+            if (sendSubscribeUnsubscribe(SUBSCRIBE, msg.topic, data.user) == -1)
+                closeService(&data);
         }
         else if (strcmp(command, "unsubscribe") == 0)
         {
-            if (param == NULL)
+            if (size != 2)
             {
-                printf("Invalid command msg <topic> <duration> <message>\n");
+                printf("Invalid command\n");
+                printf("%s <topic>\n", command);
                 continue;
             }
-            sendSubscribeUnsubscribe(&data, UNSUBSCRIBE, param);
+            if (sendSubscribeUnsubscribe(UNSUBSCRIBE, msg.topic, data.user) == -1)
+                closeService(&data);
         }
         else if (strcmp(command, "topics") == 0)
         {
-            sendRequest(&data, LIST);
+            if (sendRequest(LIST, data.user) == -1)
+                closeService(&data);
         }
         else if (strcmp(command, "help") == 0)
         {
-            printf("topics - for the list of currently existing topics.\n");
-            printf("msg <topic> <duration> <message> - to see the persistant messages of <topic>.\n");
-            printf("subscribe <topic> - To be able receive and send messages.\n");
-            printf("unsubscribe <topcis> - stops receiving messages from the <topic>.\n");
-            printf("exit - to exit and end the server.\n");
+            printf("topics - Lists the existing topics\n");
+            printf("msg <topic> <duration> \"message\" - To send a message to the <topic>\n\tUse 0 for non-persistent messages\n");
+            printf("subscribe <topic> - To be able receive and send messages to <topic>\n");
+            printf("unsubscribe <topic> - To stop receiving messages from the <topic>\n");
+            printf("exit - closes the app\n");
         }
-        else
-        {
-            printf("Command invalid, please write help for a list of commands\n");
-        }
-        // Reseting the inputs
-        param = NULL;
-        command = NULL;
-
     } while (1);
     exit(EXIT_SUCCESS);
 }
@@ -167,8 +163,9 @@ void *handleFifoCommunication(void *data)
     {
         if (read(pdata->fd_feed, &size, sizeof(int)) < 0)
         {
-            strcpy(error_msg, "[Error] Unable to read from the server piped - Response\n");
-            closeService(error_msg, data);
+            printf("[Error] Code %d", errno);
+            printf("Unable to read from the server fifo\n");
+            closeService(data);
         }
 
         if (size > 0 && read(pdata->fd_feed, &resp, size) > 0)
@@ -188,7 +185,7 @@ void *handleFifoCommunication(void *data)
             printf("%s %s - %s\n", resp.user, resp.topic, resp.text);
             if (strcmp(resp.topic, "Warning") == 0 ||
                 strcmp(resp.topic, "Close") == 0)
-                closeService(".", data);
+                closeService(data);
         }
 
     } while (!pdata->stop);
@@ -197,121 +194,97 @@ void *handleFifoCommunication(void *data)
     pthread_exit(NULL);
 }
 
-void sendRequest(void *data, msgType type)
+int sendRequest(msgType type, userData user)
 {
-    TDATA *pdata = (TDATA *)data;
-    request rqst;
-    char error_msg[100];
+    requestStruct request;
     int fd;
     if ((fd = open(MANAGER_FIFO, O_WRONLY)) <= 0)
     {
-        sprintf(error_msg, "[Error %d]\n Unable to open the server pipe for reading.\n", errno);
-        closeService(error_msg, data);
+        printf("[Error] Code %d\n", errno);
+        printf("Unable to open fifo to write\n");
+        return -1;
     }
-    memcpy(&rqst.user, &pdata->user, sizeof(userData));
-    rqst.type = type;
+    memcpy(&request.user, &user, sizeof(userData));
+    memcpy(&request.type, &type, sizeof(msgType));
 
-    if (write(fd, &rqst, sizeof(request)) < 0)
+    if (write(fd, &request, sizeof(request)) < 0)
     {
-        sprintf(error_msg, "[Error] {Request}\n Unable to send request.\n");
+        printf("[Error] Code %d\n", errno);
+        printf("Unable to send request\n");
         close(fd);
-        closeService(error_msg, data);
+        return -1;
     }
 
     printf("\tRequest Sent\n");
 
     close(fd);
-    return;
+    return 0;
 }
 
-void sendSubscribeUnsubscribe(void *data, msgType type, char *topic)
+int sendSubscribeUnsubscribe(msgType type, char *topic, userData user)
 {
-    TDATA *pdata = (TDATA *)data;
     subscribe subscribe_msg;
-    char error_msg[100];
     int fd;
     if ((fd = open(MANAGER_FIFO, O_WRONLY)) == -1)
     {
-        sprintf(error_msg, "[Error %d]\n Unable to open the server pipe for reading.\n", errno);
-        closeService(error_msg, data);
+        printf("[Error] Code %d\n Unable to open fifo to write\n", errno);
+        return -1;
     }
 
-    subscribe_msg.type = type;
-    subscribe_msg.user = pdata->user;
+    memcpy(&subscribe_msg.user, &user, sizeof(userData));
+    memcpy(&subscribe_msg.type, &type, sizeof(msgType));
     strcpy(subscribe_msg.topic, topic);
 
     if (write(fd, &subscribe_msg, sizeof(subscribe)) < 0)
     {
-        sprintf(error_msg, "[Error] {SUBSCRIBE}\n Unable to send message\n");
+        printf("[Error] Code %d\n", errno);
+        printf("Unable to send request\n");
         close(fd);
-        closeService(error_msg, data);
+        return -1;
     }
 
     close(fd);
-    return;
+    return 0;
 }
 
-void sendMessage(void *data, char *str)
+int sendMessage(msgData msg_data, userData user)
 {
-    TDATA *pdata = (TDATA *)data;
-    char error_msg[100], *topic, *msg;
-    message msg_request;
-    int fd, time;
-    // Separates user input into each component
-    topic = strtok(str, " ");
-    if (topic == NULL)
-    {
-        printf("Invalid command msg <topic> <duration> <message>\n");
-        return;
-    }
-    msg = strtok(str, " ");
-    if (msg == NULL)
-    {
-        printf("Invalid command msg <topic> <duration> <message>\n");
-        return;
-    }
-    msg_request.msg.time = atoi(msg);
-    msg = strtok(str, " ");
-    if (msg == NULL)
-    {
-        printf("Invalid command msg <topic> <duration> <message>\n");
-        return;
-    }
+    messageStruct msg_struct;
+    int fd, size;
 
     if ((fd = open(MANAGER_FIFO, O_WRONLY)) == -1)
     {
-        sprintf(error_msg, "[Error %d]\n Unable to open the server pipe for reading.\n", errno);
-        closeService(error_msg, data);
+        printf("[Error] Code %d\n", errno);
+        printf("Unable to open the server pipe for reading.\n");
+        return -1;
     }
 
-    msg_request.type = MESSAGE;
-    msg_request.user = pdata->user;
-    strcpy(msg_request.msg.text, msg);
-    strcpy(msg_request.msg.topic, topic);
-    strcpy(msg_request.msg.user, pdata->user.name);
+    msg_struct.type = MESSAGE;
+    msg_struct.user = user;
+    msg_struct.message = msg_data;
     // Calculate message size
-    msg_request.msg_size = CALCULATE_MSG_SIZE(msg);
-    if (write(fd, &msg_request, sizeof(message)) < 0)
+    msg_struct.msg_size = CALCULATE_MSGDATA_SIZE(msg_data.text);
+    size = CALCULATE_MSG_SIZE(msg_struct.msg_size);
+    if (write(fd, &msg_struct, size) < 0)
     {
-        sprintf(error_msg, "[Error] {MESSAGE}\n Unable to send message\n");
+        printf("[Error] Code %d\n", errno);
+        printf("Unable to send message\n");
         close(fd);
-        closeService(error_msg, data);
+        return -1;
     }
 
     close(fd);
-    return;
+    return 0;
 }
 
 void handle_closeService(int s, siginfo_t *i, void *v)
 {
-    closeService("The server is closing.\n", &data);
+    closeService(&data);
 }
 
-void closeService(char *msg, void *data)
+void closeService(void *data)
 {
     TDATA *pdata = (TDATA *)data;
-    if (strcmp(".", msg) != 0)
-        printf("%s", msg);
 
     printf("Stopping background processes...\n");
     pdata->stop = 1;
@@ -320,8 +293,6 @@ void closeService(char *msg, void *data)
     // Unblocks the read
     write(pdata->fd_feed, &i, sizeof(int));
     pthread_join(t, NULL);
-
-    pthread_mutex_destroy(&mutex);
 
     close(pdata->fd_feed);
     unlink(pdata->fifoName);

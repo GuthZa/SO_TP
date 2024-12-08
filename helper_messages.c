@@ -57,12 +57,13 @@ int sendResponse(int time, char *topic, char *text, userData user)
     int fd = open(FEED_FIFO_FINAL, O_WRONLY);
     if (fd == -1)
     {
-        printf("[Error %d] Sending a response\n Unable to open the feed pipe to answer.\n", errno);
+        printf("[Error] Code %d\n", errno);
+        printf("Unable to open the feed pipe to answer.\n");
         return -1;
     }
     response resp;
 
-    resp.size = CALCULATE_MSG_SIZE(text);
+    resp.size = CALCULATE_MSGDATA_SIZE(text);
     resp.message.time = time;
     strcpy(resp.message.topic, topic);
     strcpy(resp.message.text, text);

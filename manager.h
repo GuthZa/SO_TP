@@ -50,7 +50,7 @@ typedef struct
 /* ===================== RESPONSES AND REQUESTS ======================= */
 
 /**
- * @returns -1 on an error
+ * @returns -1 on an error, sent bytes otherwise
  */
 int sendResponse(int time, char *topic, char *text, userData user);
 
@@ -113,21 +113,6 @@ void saveToFile(void *data);
 /* ======================== TO BE REFACTORED ========================== */
 
 void *handleFifoCommunication(void *data);
-
-/**
- * @param msg Log message to be used
- * @param data TDATA
- *
- * Signals users to close |
- * Saves data to files |
- * Closes MANAGER_FIFO |
- * Joins threads |
- * Destroys mutex |
- * Unlinks MANAGER_FIFO |
- *
- * @note Use "." to send NO message
- */
-void closeService(char *msg, void *data);
 
 // Functions to handle admin commands
 void showPersistantMessagesInTopic(char *topic, void *data);
