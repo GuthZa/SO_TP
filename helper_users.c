@@ -3,15 +3,16 @@
 void acceptUsers(void *data, userData user)
 {
     TDATA *pdata = (TDATA *)data;
-    userData newUser = user;
-    strcpy(user.name, "[Server]");
+    // Used to send a message to the user
+    userData aux = user;
+    strcpy(aux.name, "[Server]");
 
     if (pdata->current_users >= MAX_USERS)
     {
         sendResponse(0,
                      "Warning",
-                     "We have reached the maximum users available. Please try again later.",
-                     user);
+                     "We have reached the maximum users available. Please try again later",
+                     aux);
         return;
     }
 
@@ -21,18 +22,18 @@ void acceptUsers(void *data, userData user)
         {
             sendResponse(0,
                          "Warning",
-                         "There's already a user using the chosen username.",
-                         user);
+                         "There's already a user using the chosen username",
+                         aux);
             return;
         }
     }
 
     char str[MSG_MAX_SIZE];
-    sprintf(str, "{%s}!\n", newUser.name);
+    sprintf(str, "%s!\n", user.name);
     // If there's an error confirming login, we discard the login attempt
-    if (sendResponse(0, "Welcome", str, user) != -1)
+    if (sendResponse(0, "Welcome", str, aux) != -1)
     {
-        pdata->user_list[pdata->current_users] = newUser;
+        pdata->user_list[pdata->current_users] = user;
         pdata->current_users++;
     }
     return;
@@ -55,6 +56,8 @@ void logoutUser(void *data, userData user)
         printf("locking to remove topic, logout\n");
     // Removes the user from All topics
     pthread_mutex_lock(pdata->mutex_topics);
+    //! ITS NOT REMOVING THE USER FROM ALL TOPICS
+    // if used with remove <users>
     removeUserFromAllTopics(pdata->topic_list, &pdata->current_topics, user.pid);
     pthread_mutex_unlock(pdata->mutex_topics);
     if (pdata->isDev)

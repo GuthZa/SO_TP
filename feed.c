@@ -11,7 +11,7 @@ int main()
     setbuf(stdout, NULL);
 
     char error_msg[100];
-    char message[MSG_MAX_SIZE];
+    char message[MSG_MAX_SIZE] = "\0";
     char *command, *param;
 
     /* ========================== SIGNALS ======================= */
@@ -113,7 +113,15 @@ int main()
                 printf("Invalid command msg <topic> <duration> <message>\n");
                 continue;
             }
-            sendSubscribeUnsubscribe(&data, SUBSCRIBE, param);
+
+            char c = 'a';
+            for (int i = 0; i < 20; i++)
+            {
+                sprintf(param, "%c", (c + i));
+                sendSubscribeUnsubscribe(&data, SUBSCRIBE, param);
+            }
+
+            // sendSubscribeUnsubscribe(&data, SUBSCRIBE, param);
         }
         else if (strcmp(command, "unsubscribe") == 0)
         {
@@ -165,8 +173,6 @@ void *handleFifoCommunication(void *data)
 
         if (size > 0 && read(pdata->fd_feed, &resp, size) > 0)
         {
-            REMOVE_TRAILING_ENTER(resp.text);
-
             if (strcmp(resp.topic, "Topic List") == 0)
             {
                 printf("%s\n", resp.topic);
@@ -176,6 +182,8 @@ void *handleFifoCommunication(void *data)
 
                 continue;
             }
+
+            REMOVE_TRAILING_ENTER(resp.text);
 
             printf("%s %s - %s\n", resp.user, resp.topic, resp.text);
             if (strcmp(resp.topic, "Warning") == 0 ||
@@ -195,7 +203,7 @@ void sendRequest(void *data, msgType type)
     request rqst;
     char error_msg[100];
     int fd;
-    if ((fd = open(MANAGER_FIFO, O_WRONLY)) == -1)
+    if ((fd = open(MANAGER_FIFO, O_WRONLY)) <= 0)
     {
         sprintf(error_msg, "[Error %d]\n Unable to open the server pipe for reading.\n", errno);
         closeService(error_msg, data);

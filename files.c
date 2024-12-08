@@ -7,13 +7,13 @@ void getFromFile(void *data)
     char *file_name = getenv("MSG_FICH");
     if (file_name == NULL)
     {
-        printf("[Error] Read file - Unable to get the file name from the environment variable.\n");
+        printf("[Error] Read file - Unable to get the file name from the environment variable\n");
         exit(EXIT_FAILURE);
     }
     fptr = fopen(file_name, "r");
     if (fptr == NULL)
     {
-        printf("[Warning] Read file - File does not exist, no information read.\n");
+        printf("[Warning] Read file - File does not exist, no information read\n");
         return;
     }
 
@@ -24,6 +24,7 @@ void getFromFile(void *data)
         if (fscanf(fptr, "%s", temp_topic) < 0)
         {
             fclose(fptr);
+            printf("Nothing was read from the save file\n");
             return;
         }
         if (strcmp(temp_topic, pdata->topic_list[topic_count].topic) != 0)

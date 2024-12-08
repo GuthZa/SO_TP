@@ -4,7 +4,6 @@ pthread_t t[2];
 
 int main(int argc, char **argv)
 {
-
     setbuf(stdout, NULL);
     char error_msg[100];
 
@@ -103,7 +102,7 @@ int main(int argc, char **argv)
             if (data.isDev)
                 printf("locking to print topics\n");
             pthread_mutex_lock(data.mutex_topics);
-            if (data.current_topics > 0)
+            if (data.current_topics <= 0)
             {
                 printf("No topics created.\n");
             }
@@ -111,7 +110,7 @@ int main(int argc, char **argv)
             {
                 printf("Current topics:\n");
                 for (int i = 0; i < data.current_topics; i++)
-                    printf("%d: %s with %d users subscribed.\n",
+                    printf("%d: <%s> - %d users subscribed\n",
                            i + 1,
                            data.topic_list[i].topic,
                            data.topic_list[i].subscribed_user_count);
@@ -174,17 +173,17 @@ int main(int argc, char **argv)
         }
         else if (strcmp(command, "help") == 0)
         {
-            printf("users - for the list of currently active users.\n");
-            printf("remove <username> - to log out the user <username>.\n");
-            printf("topics - for the list of currently existing topics.\n");
-            printf("show <topic> - to see the persistant messages of <topic>.\n");
-            printf("lock <topic> - blocks the <topic> from receiving more messages.\n");
+            printf("users - for the list of currently active users\n");
+            printf("remove <username> - to log out the user <username>\n");
+            printf("topics - for the list of currently existing topics\n");
+            printf("show <topic> - to see the persistant messages of <topic>\n");
+            printf("lock <topic> - blocks the <topic> from receiving more messages\n");
             printf("unlock <topic> - reverse of lock");
-            printf("close - to exit and end the server.\n");
+            printf("close - to exit and end the server\n");
         }
         else
         {
-            printf("Command unknown, press help for a list of available commands.\n");
+            printf("Command unknown, press help for a list of available commands\n");
         }
 
     } while (1);
@@ -215,7 +214,7 @@ void writeTopicList(userData user, void *data)
     int fd = open(FEED_FIFO_FINAL, O_WRONLY);
     if (fd == -1)
     {
-        printf("[Error %d] writeTopicList\n Unable to open the feed pipe to answer.\n", errno);
+        printf("[Error %d] writeTopicList\n Unable to open the feed pipe to answer\n", errno);
         return;
     }
 
@@ -223,35 +222,26 @@ void writeTopicList(userData user, void *data)
     // Topic will send "Topic List"
     // User will send if current_topics > 15
     // Time saves the number of topics
-    char str[MSG_MAX_SIZE] = "\0";
-    char extra[USER_MAX_SIZE] = "\0";
-    for (int i = 0; i < pdata->current_topics; i++)
+    char str[MSG_MAX_SIZE] = "";
+    char extra[USER_MAX_SIZE] = "";
+    char aux[MSG_MAX_SIZE];
+    for (int i = pdata->current_topics; i > 0; i--)
     {
-
         // TOPIC_MAX_SIZE (20) * TOPIC_MAX_SIZE (20) = 400
         // MSG_MAX_SIZE (300) + USER_MAX_SIZE (100) = 400
         // topics go from 0, 20
         // 15 * TOPIC_MAX_SIZE = 300
-        if (i < 14)
+        if (i > 15)
         {
-            // Appends the str + "\0" to text
-            strncat(str,
-                    pdata->topic_list[i].topic,
-                    strlen(pdata->topic_list[i].topic));
-            // Removing the "\0"
-            str[strlen(pdata->topic_list[i].topic) + 1] = '\n';
-            printf("%s", str);
+            // Appends topics
+            sprintf(aux, "%d: %s\n%s", i, pdata->topic_list[i - 1].topic, extra);
+            strcpy(extra, aux);
         }
         else
         {
-            // Appends the str + "\0" to user
-            strncat(extra,
-                    pdata->topic_list[i].topic,
-                    strlen(pdata->topic_list[i].topic));
-            // Removing the "\0"
-            if (i == pdata->current_topics - 1)
-                break;
-            extra[strlen(pdata->topic_list[i].topic) + 1] = '\n';
+            // Appends topics
+            sprintf(aux, "%d: %s\n%s", i, pdata->topic_list[i - 1].topic, str);
+            strcpy(str, aux);
         }
     }
     strcpy(user.name, extra);
@@ -277,7 +267,7 @@ void showPersistantMessagesInTopic(char *topic, void *data)
         }
     }
 
-    printf("No topic <%s> was found.\n", topic);
+    printf("No topic <%s> was found\n", topic);
     return;
 }
 
@@ -346,7 +336,7 @@ void checkUserExistsAndLogOut(char *user, void *data)
         return;
     }
 
-    printf("No user with the username [%d] found.\n", user);
+    printf("No user with the username [%s] found.\n", user);
     return;
 }
 
@@ -564,16 +554,35 @@ void subscribeUser(userData user, char *topic_name, void *data)
     TDATA *pdata = (TDATA *)data;
     char str[MSG_MAX_SIZE];
 
+    if (pdata->current_topics >= TOPIC_MAX_SIZE)
+    {
+        sprintf(str, "We have the maximum number of topic. The topic %s will not be created", topic_name);
+        strcpy(user.name, "[Server]");
+        sendResponse(0, "Info", str, user);
+        return;
+    }
+
     int last_topic = pdata->current_topics;
     int last_user;
     for (int i = 0; i < last_topic; i++)
     {
+        //! GUARANTEE THE USER IS NOT ALREADY SUBSCRIBED
         if (strcmp(topic_name, pdata->topic_list[i].topic) == 0)
         {
+            for (int j = 0; j < pdata->topic_list[i].subscribed_user_count; j++)
+            {
+                if (strcmp(pdata->topic_list[i].subscribed_users[j].name, user.name) == 0)
+                {
+                    sprintf(str, "You're already subscribed to the topic %s", topic_name);
+                    strcpy(user.name, "[Server]");
+                    sendResponse(0, "Info", str, user);
+                    return;
+                }
+            }
+
             last_user = pdata->topic_list[i].subscribed_user_count;
 
-            memcpy(&pdata->topic_list[i]
-                        .subscribed_users[last_user - 1],
+            memcpy(&pdata->topic_list[i].subscribed_users[last_user],
                    &user, sizeof(userData));
 
             pdata->topic_list[i].subscribed_user_count++;
@@ -616,14 +625,14 @@ void unsubscribeUser(userData user, char *topic_name, void *data)
                     &pdata->topic_list[i].subscribed_user_count,
                     user.pid) == -1)
             {
-                sprintf(str, "You're not subscribed to the topic %s.", topic_name);
+                sprintf(str, "You're not subscribed to the topic %s", topic_name);
                 strcpy(user.name, "[Server]");
                 sendResponse(0, "Info", str, user);
             }
             return;
         }
     }
-    sprintf(str, "You've unsubscribed to the topic %s.", topic_name);
+    sprintf(str, "You've unsubscribed to the topic %s", topic_name);
     sendResponse(0, "Info", str, user);
     return;
 }

@@ -25,9 +25,12 @@ typedef struct
 /**
  * @param stop int flag to terminate thread
  * @param fd_manager int to be able to send exit message to thread
+ * @param user_list userData list of users logged in
+ * @param current_users int number of existing users
  * @param topic_list topic list of topics
  * @param current_topics int number of existing topics
- * @param m thread mutex
+ * @param mutex_users thread mutex
+ * @param mutex_topics thread mutex
  *
  * @note Data struct for threads
  */
