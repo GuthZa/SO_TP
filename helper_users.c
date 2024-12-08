@@ -45,23 +45,24 @@ void logoutUser(void *data, userData user)
 
     // Removes the user from the user_list
     if (pdata->isDev)
-        printf("locking to remove user, logout\n");
+        printf("Lock users before remove user - logout\n");
     pthread_mutex_lock(pdata->mutex_users);
     removeUserFromUserList(pdata->user_list, &pdata->current_users, user.pid);
     pthread_mutex_unlock(pdata->mutex_users);
     if (pdata->isDev)
-        printf("unlocking to remove user, logout\n");
+        printf("Unlock users after remove user - logout\n");
 
     if (pdata->isDev)
-        printf("locking to remove topic, logout\n");
+        printf("Lock topics before remove user form topic - logout\n");
     // Removes the user from All topics
     pthread_mutex_lock(pdata->mutex_topics);
     //! ITS NOT REMOVING THE USER FROM ALL TOPICS
     // if used with remove <users>
     removeUserFromAllTopics(pdata->topic_list, &pdata->current_topics, user.pid);
+    clearEmptyTopics(pdata->topic_list, &pdata->current_topics);
     pthread_mutex_unlock(pdata->mutex_topics);
     if (pdata->isDev)
-        printf("unlocking to remove topic, logout\n");
+        printf("Unlock topics after remove user from topic - logout\n");
     return;
 }
 
@@ -96,11 +97,11 @@ void removeUserFromAllTopics(topic *topic_list, int *topic_count, int pid)
             {
                 // Removes the user from the list and clears the memory
                 clearUserFromTopic(&topic_list[i], j);
-                clearTopicIfEmpty(topic_list, topic_count, i);
                 break;
             }
         }
     }
+    printf("%d", *topic_count);
     return;
 }
 

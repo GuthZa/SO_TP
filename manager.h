@@ -103,16 +103,10 @@ void unsubscribeUser(userData user, char *topic_name, void *data);
 void createNewTopic(topic *new_topic, char *topic_name, void *data);
 
 /**
- *
- * @note persist_msg[message_index] from the current topic
- */
-void removeExpiredMessage(int message_index, topic *current_topic);
-
-/**
  * Removes the topic and clears the data
- * returns 0 if it removed a topic
+ * returns the current number of topics
  */
-int clearTopicIfEmpty(topic *topic_list, int *current_topics, int index);
+int clearEmptyTopics(topic *topic_list, int *current_topics);
 
 /* ============= UPDATING MESSAGE TIMERS ================ */
 // TODO maybe use differente mutex
@@ -120,7 +114,7 @@ int clearTopicIfEmpty(topic *topic_list, int *current_topics, int index);
 // Handles updating, remove expired messages and topics
 void *updateMessageCounter(void *data);
 
-void decrementMessageTimers(topic *current_topic);
+void decreaseMessageTimeOnTopic(topic *current_topic);
 
 /* ========================= HANDLING FILES =========================== */
 

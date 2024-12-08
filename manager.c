@@ -78,7 +78,7 @@ int main(int argc, char **argv)
         else if (strcmp(command, "users") == 0)
         {
             if (data.isDev)
-                printf("locking to print users\n");
+                printf("Lock users before printing\n");
             pthread_mutex_lock(data.mutex_users);
             if (data.current_users == 0)
             {
@@ -92,16 +92,17 @@ int main(int argc, char **argv)
                            i + 1,
                            data.user_list[i].name,
                            data.user_list[i].pid);
-                pthread_mutex_unlock(data.mutex_users);
-                if (data.isDev)
-                    printf("unlocking to print user\n");
             }
+            pthread_mutex_unlock(data.mutex_users);
+            if (data.isDev)
+                printf("Unlock users after printing\n");
         }
         else if (strcmp(command, "topics") == 0)
         {
             if (data.isDev)
-                printf("locking to print topics\n");
+                printf("Lock topic before print\n");
             pthread_mutex_lock(data.mutex_topics);
+
             if (data.current_topics <= 0)
             {
                 printf("No topics created.\n");
@@ -115,9 +116,10 @@ int main(int argc, char **argv)
                            data.topic_list[i].topic,
                            data.topic_list[i].subscribed_user_count);
             }
+
             pthread_mutex_unlock(data.mutex_topics);
             if (data.isDev)
-                printf("unlocking to print topics\n");
+                printf("Unlock topics after print\n");
         }
         else if (strcmp(command, "remove") == 0)
         {
@@ -137,11 +139,13 @@ int main(int argc, char **argv)
                 continue;
             }
             printf("Checking for messages...\n");
+            if (data.isDev)
+                printf("Lock topics before show messages\n");
             pthread_mutex_lock(data.mutex_topics);
             showPersistantMessagesInTopic(param, &data);
             pthread_mutex_unlock(data.mutex_topics);
             if (data.isDev)
-                printf("Unlock after checking for messages...\n");
+                printf("Unlock topics after show messages\n");
         }
         else if (strcmp(command, "lock") == 0)
         {
@@ -151,11 +155,13 @@ int main(int argc, char **argv)
                 continue;
             }
             printf("Locking the topic <%s> ...\n", param);
+            if (data.isDev)
+                printf("Lock topics before locking topic\n");
             pthread_mutex_lock(data.mutex_topics);
             lockTopic(param, &data);
             pthread_mutex_unlock(data.mutex_topics);
             if (data.isDev)
-                printf("Unlocking after locking topics...\n");
+                printf("Unlock topics after locking topic\n");
         }
         else if (strcmp(command, "unlock") == 0)
         {
@@ -165,11 +171,13 @@ int main(int argc, char **argv)
                 continue;
             }
             printf("Locking the untopic <%s> ...\n", param);
+            if (data.isDev)
+                printf("Lock topics before unlocking topic\n");
             pthread_mutex_lock(data.mutex_topics);
             unlockTopic(param, &data);
             pthread_mutex_unlock(data.mutex_topics);
             if (data.isDev)
-                printf("Unlocking after unlocking topics...\n");
+                printf("Unlock topics after unlocking topic\n");
         }
         else if (strcmp(command, "help") == 0)
         {
@@ -316,7 +324,7 @@ void checkUserExistsAndLogOut(char *user, void *data)
     union sigval val;
     val.sival_int = -1;
     if (pdata->isDev)
-        printf("Checking if the user exists...\n");
+        printf("Lock users before checking if user exists\n");
     pthread_mutex_lock(pdata->mutex_users);
     for (int i = 0; i < pdata->current_users; i++)
     {
@@ -327,7 +335,7 @@ void checkUserExistsAndLogOut(char *user, void *data)
     }
     pthread_mutex_unlock(pdata->mutex_users);
     if (pdata->isDev)
-        printf("Unlocking after checking if user exists\n");
+        printf("Unlock users after checking if user exists\n");
 
     if (userToRemove.pid != 0)
     {
@@ -384,12 +392,12 @@ void *handleFifoCommunication(void *data)
                 printf("[Warning] Nothing was read from the pipe - Login\n");
 
             if (pdata->isDev)
-                printf("locking to login user\n");
+                printf("Lock users before login\n");
             pthread_mutex_lock(pdata->mutex_users);
             acceptUsers(data, user);
             pthread_mutex_unlock(pdata->mutex_users);
             if (pdata->isDev)
-                printf("unlocking to login user\n");
+                printf("Unlock users after login\n");
             break;
         case LOGOUT:
             size = read(fd, &user, sizeof(userData));
@@ -432,12 +440,12 @@ void *handleFifoCommunication(void *data)
                 continue;
             }
             if (pdata->isDev)
-                printf("locking to subscribe to topic\n");
+                printf("Lock topics before subscribe to topic\n");
             pthread_mutex_lock(pdata->mutex_topics);
             subscribeUser(user, error_msg, data);
             pthread_mutex_unlock(pdata->mutex_topics);
             if (pdata->isDev)
-                printf("unlocking to subscribe to topic\n");
+                printf("Unlock topics after subscribe to topic\n");
             break;
         case UNSUBSCRIBE:
             size = read(fd, &user, sizeof(userData));
@@ -466,12 +474,12 @@ void *handleFifoCommunication(void *data)
                 continue;
             }
             if (pdata->isDev)
-                printf("locking to unsubscribe topic\n");
+                printf("Lock topics before unsubscribe topic\n");
             pthread_mutex_lock(pdata->mutex_topics);
             unsubscribeUser(user, error_msg, data);
             pthread_mutex_unlock(pdata->mutex_topics);
             if (pdata->isDev)
-                printf("unlocking to unsubscribe topic\n");
+                printf("Unlock topics after unsubscribe topic\n");
         case MESSAGE:
             break;
         case LIST:
@@ -488,12 +496,12 @@ void *handleFifoCommunication(void *data)
                 printf("[Warning] Nothing was read from the pipe - Login\n");
             }
             if (pdata->isDev)
-                printf("locking to write topics to user\n");
+                printf("Lock topic before write topics to user\n");
             pthread_mutex_lock(pdata->mutex_topics);
             writeTopicList(user, data);
             pthread_mutex_unlock(pdata->mutex_topics);
             if (pdata->isDev)
-                printf("unlocking to write topics to user\n");
+                printf("Unlock after write topics to user\n");
             break;
         default:
             type = -1;
@@ -512,13 +520,13 @@ void signal_EndService(void *data)
     union sigval val;
     val.sival_int = -1;
     if (pdata->isDev)
-        printf("locking to signal user\n");
+        printf("Locking users to signal user\n");
     pthread_mutex_lock(pdata->mutex_users);
     for (int j = 0; j < pdata->current_users; j++)
         sigqueue(pdata->user_list[j].pid, SIGUSR2, val);
     pthread_mutex_unlock(pdata->mutex_users);
     if (pdata->isDev)
-        printf("unlocking to signal user\n");
+        printf("Unlock users to signal user\n");
 }
 
 int sendResponse(int time, char *topic, char *text, userData user)
@@ -550,6 +558,8 @@ int sendResponse(int time, char *topic, char *text, userData user)
 
 void subscribeUser(userData user, char *topic_name, void *data)
 {
+    //! If a diff user tries to subscribe, it does not subscribe them
+    
     //* Maybe guarantee that it also exists on user_list
     TDATA *pdata = (TDATA *)data;
     char str[MSG_MAX_SIZE];
@@ -566,7 +576,6 @@ void subscribeUser(userData user, char *topic_name, void *data)
     int last_user;
     for (int i = 0; i < last_topic; i++)
     {
-        //! GUARANTEE THE USER IS NOT ALREADY SUBSCRIBED
         if (strcmp(topic_name, pdata->topic_list[i].topic) == 0)
         {
             for (int j = 0; j < pdata->topic_list[i].subscribed_user_count; j++)
@@ -611,6 +620,7 @@ void subscribeUser(userData user, char *topic_name, void *data)
 
 void unsubscribeUser(userData user, char *topic_name, void *data)
 {
+    //! IT IS SENDING THE USERNAME INCORRECTLY
     //* Maybe guarantee that it also exists on user_list
     TDATA *pdata = (TDATA *)data;
     char str[USER_MAX_SIZE];
@@ -628,8 +638,8 @@ void unsubscribeUser(userData user, char *topic_name, void *data)
                 sprintf(str, "You're not subscribed to the topic %s", topic_name);
                 strcpy(user.name, "[Server]");
                 sendResponse(0, "Info", str, user);
+                return;
             }
-            return;
         }
     }
     sprintf(str, "You've unsubscribed to the topic %s", topic_name);
