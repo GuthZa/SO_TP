@@ -20,22 +20,15 @@ typedef struct
 
 /**
  * Already calculates the size required | handles the fifo to write
- *
- * @return -1 if there was na error, 0 otherwise
  */
-int sendMessage(msgData msg_data, userData user);
+void sendMessage(msgData msg_data, void *data);
 
 /**
  * Already calculates the size required | handles the fifo to write
- *
- * @return -1 if there was na error, 0 otherwise
  */
-int sendSubscribeUnsubscribe(msgType type, char *topic, userData user);
+void sendSubscribeUnsubscribe(msgType type, char *topic, void *data);
 
-/**
- * @return -1 on an error, 0 otherwise
- */
-int sendRequest(msgType type, userData user);
+void sendRequest(msgType type, void *data);
 
 void handle_closeService(int s, siginfo_t *i, void *v);
 

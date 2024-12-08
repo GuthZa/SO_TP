@@ -139,4 +139,4 @@ void handleOverrideCancel(int s, siginfo_t *i, void *v);
  * Destroys mutex |
  * Unlinks FIFO |
  */
-void closeService(void *data);
+void closeService(char *msg, void *data);

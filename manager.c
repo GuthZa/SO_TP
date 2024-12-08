@@ -36,25 +36,19 @@ int main(int argc, char **argv)
 
     /* ================== START THREADS =================== */
     if (pthread_create(&t[0], NULL, &updateMessageCounter, &data) != 0)
-    {
-        printf("[Error] Code: {%d}\n", errno);
-        printf(" Thread setup failed. \n");
-        closeService(&data);
-    }
+        closeService("Thread setup failed - Message timers", &data);
 
     if (pthread_create(&t[1], NULL, &handleFifoCommunication, &data) != 0)
-    {
-        printf("[Error] Code: {%d}\n", errno);
-        printf("Thread setup failed. \n");
-        closeService(&data);
-    }
+        closeService("Thread setup failed - Fifo Communication", &data);
 
     /* =================== SERVICE START ===================== */
     char msg[MSG_MAX_SIZE]; // to save admin input
     char *param, *command;
     do
     {
-        read(STDIN_FILENO, msg, MSG_MAX_SIZE);
+        if (read(STDIN_FILENO, msg, MSG_MAX_SIZE) < 0)
+        {
+        }
         REMOVE_TRAILING_ENTER(msg);
         // Divides the input of the user in multiple strings
         // Similar to the way argv is handled
@@ -69,8 +63,7 @@ int main(int argc, char **argv)
 
         if (strcmp(command, "close") == 0)
         {
-            printf("\nClosing service...\n");
-            closeService(&data);
+            closeService("\nClosing service...\n", &data);
         }
         else if (strcmp(command, "users") == 0)
         {
@@ -211,21 +204,14 @@ void *handleFifoCommunication(void *data)
     /* ================== SETUP THE FIFOS ================== */
     createFifo(MANAGER_FIFO);
     if ((fd = open(MANAGER_FIFO, O_RDWR)) == -1)
-    {
-        printf("[Error] Code: {%d}\n", errno);
-        printf("Unable to open the fifo for reading\n");
-        closeService(data);
-    }
+        closeService("Unable to open the fifo for reading", data);
+
     pdata->fd_manager = fd;
 
     do
     {
         if (read(fd, &type, sizeof(msgType)) < 0)
-        {
-            printf("[Error] Code: {%d}\n", errno);
-            printf("Unable to read from the fifo: Msg type\n");
-            closeService(data);
-        }
+            closeService("Unable to read from the fifo: Msg type", data);
 
         //* Move the validation inside the functions
 
@@ -235,9 +221,7 @@ void *handleFifoCommunication(void *data)
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
-                printf("[Error] Code: {%d}\n", errno);
-                printf("Unable to read from the fifo: Login\n");
-                closeService(data);
+                closeService("Unable to read from the fifo: Login", data);
             }
             if (size == 0)
             {
@@ -259,9 +243,7 @@ void *handleFifoCommunication(void *data)
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
-                printf("[Error] Code: {%d}\n", errno);
-                printf("Unable to read from the fifo: Logout\n");
-                closeService(data);
+                closeService("Unable to read from the fifo: Logout", data);
             }
             if (size == 0)
             {
@@ -274,9 +256,7 @@ void *handleFifoCommunication(void *data)
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
-                printf("[Error] Code: {%d}\n", errno);
-                printf("Unable to read from the fifo: Subscribe\n");
-                closeService(data);
+                closeService("Unable to read from the fifo: Subscribe", data);
             }
             if (size == 0)
             {
@@ -288,9 +268,7 @@ void *handleFifoCommunication(void *data)
             size = read(fd, error_msg, TOPIC_MAX_SIZE);
             if (size < 0)
             {
-                printf("[Error] Code: {%d}\n", errno);
-                printf("Unable to read from the fifo: Subscribe\n");
-                closeService(data);
+                closeService("Unable to read from the fifo: Subscribe", data);
             }
             if (size == 0)
             {
@@ -311,9 +289,7 @@ void *handleFifoCommunication(void *data)
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
-                printf("[Error] Code: {%d}\n", errno);
-                printf("Unable to read from the fifo: Unsubscribe\n");
-                closeService(data);
+                closeService("Unable to read from the fifo: Unsubscribe", data);
             }
             if (size == 0)
             {
@@ -323,9 +299,7 @@ void *handleFifoCommunication(void *data)
             size = read(fd, error_msg, TOPIC_MAX_SIZE);
             if (size < 0)
             {
-                printf("[Error] Code: {%d}\n", errno);
-                printf("Unable to read from the fifo: Unsubscribe\n");
-                closeService(data);
+                closeService("Unable to read from the fifo: Unsubscribe", data);
             }
             if (size == 0)
             {
@@ -348,9 +322,7 @@ void *handleFifoCommunication(void *data)
             size = read(fd, &msg_size, sizeof(int));
             if (size < 0)
             {
-                printf("[Error] Code: {%d}\n", errno);
-                printf("Unable to read from the fifo: Message\n");
-                closeService(data);
+                closeService("Unable to read from the fifo: Message", data);
             }
             if (size == 0)
             {
@@ -361,9 +333,7 @@ void *handleFifoCommunication(void *data)
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
-                printf("[Error] Code: {%d}\n", errno);
-                printf("Unable to read from the fifo: Message\n");
-                closeService(data);
+                closeService("Unable to read from the fifo: Message", data);
             }
             if (size == 0)
             {
@@ -374,9 +344,7 @@ void *handleFifoCommunication(void *data)
             size = read(fd, &msg, sizeof(msgData));
             if (size < 0)
             {
-                printf("[Error] Code: {%d}\n", errno);
-                printf("Unable to read from the fifo: Message\n");
-                closeService(data);
+                closeService("Unable to read from the fifo: Message", data);
             }
             if (size == 0)
             {
@@ -395,9 +363,7 @@ void *handleFifoCommunication(void *data)
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
-                printf("[Error] Code: {%d}\n", errno);
-                printf("Unable to read from the fifo: List\n");
-                closeService(data);
+                closeService("Unable to read from the fifo: List", data);
             }
             if (size == 0)
             {
@@ -440,9 +406,14 @@ void signal_EndService(void *data)
         printf("Unlock users to signal user\n");
 }
 
-void closeService(void *data)
+void closeService(char *msg, void *data)
 {
     TDATA *pdata = (TDATA *)data;
+    if (strcmp(".", msg) == 0)
+    {
+        printf("[Error] Code: {%d}\n", errno);
+        printf("%s\n", msg);
+    }
 
     pdata->stop = 1;
 
@@ -463,5 +434,5 @@ void closeService(void *data)
     pthread_mutex_destroy(pdata->mutex_users);
     close(pdata->fd_manager);
     unlink(MANAGER_FIFO);
-    exit(EXIT_SUCCESS);
+    (strcmp(".", msg) == 0) ? exit(EXIT_SUCCESS) : exit(EXIT_FAILURE);
 }
