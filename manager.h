@@ -77,19 +77,10 @@ void acceptUsers(void *data, userData user);
 void logoutUser(void *data, userData user);
 
 /**
- * Removes one user from subscribed_users
- * returns -1 if the user does NOT exist
+ * Removes one user from the list and clears the memory
+ * @note return -1 if NO user was removed
  */
-int removeUserFromUserList(userData *user_list, int *user_count, int pid);
-
-/**
- * Checks if the user is subscribed to any topic and removes it
- */
-void removeUserFromAllTopics(topic *topic_list, int *topic_count, int pid);
-/**
- * Updates the subscribed_user list and clears memory
- */
-void clearUserFromTopic(topic *topic_list, int index);
+int removeUserFromList(userData *user_list, int *user_count, int pid);
 
 void subscribeUser(userData user, char *topic, void *data);
 
@@ -109,8 +100,6 @@ void createNewTopic(topic *new_topic, char *topic_name, void *data);
 int clearEmptyTopics(topic *topic_list, int *current_topics);
 
 /* ============= UPDATING MESSAGE TIMERS ================ */
-// TODO maybe use differente mutex
-
 // Handles updating, remove expired messages and topics
 void *updateMessageCounter(void *data);
 

@@ -49,38 +49,51 @@ void decreaseMessageTimeOnTopic(topic *current_topic)
     }
 }
 
-int clearEmptyTopics(topic *topic_list, int *current_topics)
+int sendResponse(int time, char *topic, char *text, userData user)
 {
-    int last_topic = *current_topics - 1;
-    int i = 0;
-    while (i < *current_topics)
+    char FEED_FIFO_FINAL[100];
+    sprintf(FEED_FIFO_FINAL, FEED_FIFO, user.pid);
+    int size;
+    int fd = open(FEED_FIFO_FINAL, O_WRONLY);
+    if (fd == -1)
     {
-        if (topic_list[i].persistent_msg_count <= 0 &&
-            topic_list[i].subscribed_user_count <= 0)
-        {
-            if (i < last_topic)
-            {
-                memcpy(&topic_list[i],
-                       &topic_list[last_topic],
-                       sizeof(topic));
-            }
+        printf("[Error %d] Sending a response\n Unable to open the feed pipe to answer.\n", errno);
+        return -1;
+    }
+    response resp;
 
-            memset(&topic_list[last_topic], 0, sizeof(topic));
-            (*current_topics)--;
-        }
-        else
+    resp.size = CALCULATE_MSG_SIZE(text);
+    resp.message.time = time;
+    strcpy(resp.message.topic, topic);
+    strcpy(resp.message.text, text);
+    strcpy(resp.message.user, user.name);
+
+    size = write(fd, &resp, resp.size + sizeof(int));
+    close(fd);
+    if (size < 0)
+        printf("[Warning] Unable to respond to the client.\n");
+
+    return size;
+}
+
+void showPersistantMessagesInTopic(char *topic, void *data)
+{
+    TDATA *pdata = (TDATA *)data;
+    for (int i = 0; i < pdata->current_topics; i++)
+    {
+        if (strcmp(pdata->topic_list[i].topic, topic) == 0)
         {
-            i++;
+            for (int j = 0; j < pdata->topic_list[i].persistent_msg_count; j++)
+            {
+                printf("%d: From [%s] with %d time left\n \t%s\n", i,
+                       pdata->topic_list[i].persist_msg[j].user,
+                       pdata->topic_list[i].persist_msg[j].time,
+                       pdata->topic_list[i].persist_msg[j].text);
+            }
+            return;
         }
     }
 
-    return *current_topics;
-}
-
-void createNewTopic(topic *new_topic, char *topic_name, void *data)
-{
-    new_topic->is_topic_locked = 0;
-    strncpy(new_topic->topic, topic_name, TOPIC_MAX_SIZE);
-    new_topic->persistent_msg_count = 0;
-    new_topic->subscribed_user_count = 0;
+    printf("No topic <%s> was found\n", topic);
+    return;
 }
