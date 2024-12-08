@@ -158,7 +158,7 @@ int main(int argc, char **argv)
             if (data.isDev)
                 printf("Lock topics before locking topic\n");
             pthread_mutex_lock(data.mutex_topics);
-            lockTopic(param, &data);
+            lockUnlockTopic(param, 1, &data);
             pthread_mutex_unlock(data.mutex_topics);
             if (data.isDev)
                 printf("Unlock topics after locking topic\n");
@@ -174,7 +174,7 @@ int main(int argc, char **argv)
             if (data.isDev)
                 printf("Lock topics before unlocking topic\n");
             pthread_mutex_lock(data.mutex_topics);
-            unlockTopic(param, &data);
+            lockUnlockTopic(param, 0, &data);
             pthread_mutex_unlock(data.mutex_topics);
             if (data.isDev)
                 printf("Unlock topics after unlocking topic\n");

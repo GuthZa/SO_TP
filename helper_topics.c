@@ -96,6 +96,7 @@ void unsubscribeUser(userData user, char *topic_name, void *data)
     //* Maybe guarantee that it also exists on user_list
     TDATA *pdata = (TDATA *)data;
     char str[USER_MAX_SIZE];
+    strcpy(user.name, "[Server]");
 
     int last_topic = pdata->current_topics;
     for (int i = 0; i < last_topic; i++)
@@ -108,7 +109,6 @@ void unsubscribeUser(userData user, char *topic_name, void *data)
                     user.pid))
             {
                 sprintf(str, "You're not subscribed to the topic %s", topic_name);
-                strcpy(user.name, "[Server]");
                 sendResponse(0, "Info", str, user);
                 return;
             }
@@ -127,7 +127,7 @@ void createNewTopic(topic *new_topic, char *topic_name, void *data)
     new_topic->subscribed_user_count = 0;
 }
 
-void unlockTopic(char *topic, void *data)
+void lockUnlockTopic(char *topic, int isToLock, void *data)
 {
     TDATA *pdata = (TDATA *)data;
 
@@ -135,26 +135,11 @@ void unlockTopic(char *topic, void *data)
     {
         if (strcmp(pdata->topic_list[i].topic, topic) == 0)
         {
-            pdata->topic_list[i].is_topic_locked = 0;
-            printf("Topic <%s> was unlocked.\n", topic);
-            return;
-        }
-    }
-
-    printf("No topic <%s> was found.\n", topic);
-    return;
-}
-
-void lockTopic(char *topic, void *data)
-{
-    TDATA *pdata = (TDATA *)data;
-
-    for (int i = 0; i < pdata->current_topics; i++)
-    {
-        if (strcmp(pdata->topic_list[i].topic, topic) == 0)
-        {
-            pdata->topic_list[i].is_topic_locked = 1;
-            printf("Topic <%s> was unlocked.\n", topic);
+            pdata->topic_list[i].is_topic_locked = isToLock;
+            if (isToLock)
+                printf("Topic <%s> was locked.\n", topic);
+            else if (!isToLock)
+                printf("Topic <%s> was unlocked.\n", topic);
             return;
         }
     }
@@ -167,16 +152,15 @@ void writeTopicList(userData user, void *data)
 {
     TDATA *pdata = (TDATA *)data;
     char FEED_FIFO_FINAL[100];
+    char aux[MSG_MAX_SIZE];
     sprintf(FEED_FIFO_FINAL, FEED_FIFO, user.pid);
 
     int last_topic = pdata->current_topics;
     if (last_topic <= 0)
     {
         strcpy(user.name, "[Server]");
-        sendResponse(0,
-                     "Info",
-                     "There are no topics.\n Feel free to create one!",
-                     user);
+        sprintf(aux, "There are no topics.\n Feel free to create one!");
+        sendResponse(0, "Info", aux, user);
         return;
     }
 
@@ -193,7 +177,6 @@ void writeTopicList(userData user, void *data)
     // Time saves the number of topics
     char str[MSG_MAX_SIZE] = "";
     char extra[USER_MAX_SIZE] = "";
-    char aux[MSG_MAX_SIZE];
     for (int i = pdata->current_topics; i > 0; i--)
     {
         // TOPIC_MAX_SIZE (20) * TOPIC_MAX_SIZE (20) = 400

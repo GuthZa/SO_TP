@@ -39,13 +39,12 @@ void acceptUsers(void *data, userData user)
     // Used to send a message to the user
     userData aux = user;
     strcpy(aux.name, "[Server]");
+    char str[MSG_MAX_SIZE];
 
     if (pdata->current_users >= MAX_USERS)
     {
-        sendResponse(0,
-                     "Warning",
-                     "We have reached the maximum users available. Please try again later",
-                     aux);
+        sprintf(str, "We have reached the maximum users available. Please try again later");
+        sendResponse(0, "Warning", str, aux);
         return;
     }
 
@@ -53,15 +52,12 @@ void acceptUsers(void *data, userData user)
     {
         if (strcmp(pdata->user_list[j].name, user.name) == 0)
         {
-            sendResponse(0,
-                         "Warning",
-                         "There's already a user using the chosen username",
-                         aux);
+            sprintf(str, "There's already a user using the chosen username");
+            sendResponse(0, "Warning", str, aux);
             return;
         }
     }
 
-    char str[MSG_MAX_SIZE];
     sprintf(str, "%s!\n", user.name);
     // If there's an error confirming login, we discard the login attempt
     if (sendResponse(0, "Welcome", str, aux) != -1)
@@ -81,9 +77,9 @@ void logoutUser(void *data, userData user)
         printf("Lock users before remove user - logout\n");
     pthread_mutex_lock(pdata->mutex_users);
 
-    removeUserFromUserList(pdata->user_list,
-                           &pdata->current_users,
-                           user.pid);
+    removeUserFromList(pdata->user_list,
+                       &pdata->current_users,
+                       user.pid);
 
     pthread_mutex_unlock(pdata->mutex_users);
     if (pdata->isDev)

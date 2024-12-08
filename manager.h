@@ -50,7 +50,7 @@ typedef struct
 /* ===================== RESPONSES AND REQUESTS ======================= */
 
 /**
- * return -1 on an error
+ * @returns -1 on an error
  */
 int sendResponse(int time, char *topic, char *text, userData user);
 
@@ -78,7 +78,7 @@ void logoutUser(void *data, userData user);
 
 /**
  * Removes one user from the list and clears the memory
- * @note return -1 if NO user was removed
+ * @returns 0 if NO user was removed, 1 otherwise
  */
 int removeUserFromList(userData *user_list, int *user_count, int pid);
 
@@ -95,7 +95,7 @@ void createNewTopic(topic *new_topic, char *topic_name, void *data);
 
 /**
  * Removes the topic and clears the data
- * returns the current number of topics
+ * @returns the current number of topics
  */
 int clearEmptyTopics(topic *topic_list, int *current_topics);
 
@@ -132,9 +132,10 @@ void closeService(char *msg, void *data);
 // Functions to handle admin commands
 void showPersistantMessagesInTopic(char *topic, void *data);
 
-//* Refactor into a single function
-void lockTopic(char *topic, void *data);
-void unlockTopic(char *topic, void *data);
+/**
+ * @param isToLock 1 lock | 0 unlock
+ */
+void lockUnlockTopic(char *topic, int isToLock, void *data);
 
 /**
  * Sends 1 string with all the topics
