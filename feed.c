@@ -114,14 +114,14 @@ int main()
                 continue;
             }
 
-            char c = 'a';
-            for (int i = 0; i < 20; i++)
-            {
-                sprintf(param, "%c", (c + i));
-                sendSubscribeUnsubscribe(&data, SUBSCRIBE, param);
-            }
+            // char c = 'a';
+            // for (int i = 0; i < 20; i++)
+            // {
+            //     sprintf(param, "%c", (c + i));
+            //     sendSubscribeUnsubscribe(&data, SUBSCRIBE, param);
+            // }
 
-            // sendSubscribeUnsubscribe(&data, SUBSCRIBE, param);
+            sendSubscribeUnsubscribe(&data, SUBSCRIBE, param);
         }
         else if (strcmp(command, "unsubscribe") == 0)
         {
