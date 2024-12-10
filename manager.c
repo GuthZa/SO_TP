@@ -112,7 +112,14 @@ int main()
                 continue;
             }
 
-            removeUser(param, &data);
+            if (pthread_mutex_lock(data.mutex_users) != 0)
+                printf("Lock users before checking if user exists\n");
+            int index = removeUser(param, &data);
+            if (index > 0)
+                logoutUser(data.user_list[index], &data);
+
+            if (pthread_mutex_unlock(data.mutex_users) != 0)
+                printf("Unlock users after checking if user exists\n");
         }
         else if (strcmp(command, "show") == 0)
         {
@@ -247,6 +254,7 @@ void *handleFifoCommunication(void *data)
             }
 
             logoutUser(user, data);
+            printf("User [%s] logged out\n", user.name);
             break;
         case SUBSCRIBE:
             size = read(fd, &user, sizeof(userData));
@@ -311,17 +319,6 @@ void *handleFifoCommunication(void *data)
             msgData msg;
             int msg_size;
 
-            size = read(fd, &msg_size, sizeof(int));
-            if (size < 0)
-            {
-                closeService("Unable to read from the fifo: Message", data);
-            }
-            if (size == 0)
-            {
-                printf("[Warning] Nothing was read from the fifo: Message\n");
-                continue;
-            }
-
             size = read(fd, &user, sizeof(userData));
             if (size < 0)
             {
@@ -330,6 +327,17 @@ void *handleFifoCommunication(void *data)
             if (size == 0)
             {
                 sendResponse(0, "[Warning]", "There was a problem sending the message.\n", user);
+                printf("[Warning] Nothing was read from the fifo: Message\n");
+                continue;
+            }
+
+            size = read(fd, &msg_size, sizeof(int));
+            if (size < 0)
+            {
+                closeService("Unable to read from the fifo: Message", data);
+            }
+            if (size == 0)
+            {
                 printf("[Warning] Nothing was read from the fifo: Message\n");
                 continue;
             }
@@ -350,11 +358,6 @@ void *handleFifoCommunication(void *data)
             }
 
             //* send messages to user because empty data
-
-            // printf("text: %s\n", msg.text);
-            // printf("topic: %s\n", msg.topic);
-            printf("user: %s\n", msg.user);
-            // printf("time: %d\n", msg.time);
             if (pthread_mutex_lock(pdata->mutex_topics) != 0)
                 printf("Lock topics before handling message\n");
 

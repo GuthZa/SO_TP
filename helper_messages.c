@@ -127,6 +127,7 @@ void handleNewMessage(msgData message, int msg_size, userData user, void *data)
         pdata->current_topics);
     if (index_topics < 0)
     {
+        printf("User [%s] sent a message to a topic that does not exist.\n", user.name);
         sprintf(str, "You're not subscribe to the topic %s", message.topic);
         sendResponse(0, "Info", str, aux);
         return;
@@ -138,6 +139,7 @@ void handleNewMessage(msgData message, int msg_size, userData user, void *data)
         &pdata->topic_list[index_topics].subscribed_user_count);
     if (index < 0)
     {
+        printf("User [%s] sent a message to a topic they are not subscribed\n");
         sprintf(str, "You're not subscribe to the topic %s", message.topic);
         sendResponse(0, "Info", str, aux);
         return;
@@ -161,7 +163,7 @@ void handleNewMessage(msgData message, int msg_size, userData user, void *data)
         {
             printf("Sending user message to user [%s]\n",
                    pdata->topic_list[index_topics].subscribed_users[i].name);
-                   
+
             sendResponse(message.time, message.topic, message.text,
                          pdata->topic_list[index_topics].subscribed_users[i]);
         }

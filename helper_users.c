@@ -31,33 +31,37 @@ void removeUserFromList(userData *user_list, int *user_count, int index)
     return;
 }
 
-void removeUser(char *user, void *data)
+int removeUser(char *user, void *data)
 {
     //? Maybe refactor to use the pipes
     //! WARN OTHER USERS
     TDATA *pdata = (TDATA *)data;
-    union sigval val;
-    val.sival_int = -1;
-    if (pthread_mutex_lock(pdata->mutex_users) != 0)
-        printf("Lock users before checking if user exists\n");
+    char str[MSG_MAX_SIZE];
 
     int index = checkUserIsInList(user, pdata->user_list, &pdata->current_users);
 
-    if (index >= 0)
+    if (index < 0)
     {
-        printf("Removed user [%s] with pid %d\n",
-               pdata->user_list[index].name,
-               pdata->user_list[index].pid);
-        sigqueue(pdata->user_list[index].pid, SIGUSR2, val);
+        printf("No user with the username [%s] found.\n", user);
+        return 0;
     }
-    if (pthread_mutex_unlock(pdata->mutex_users) != 0)
-        printf("Unlock users after checking if user exists\n");
+    printf("Removed user [%s] with pid %d\n",
+           pdata->user_list[index].name,
+           pdata->user_list[index].pid);
+    sendResponse(0, "Close",
+                 "You have been removed by the admin.",
+                 pdata->user_list[index]);
 
-    if (index >= 0)
-        logoutUser(pdata->user_list[index], data);
+    sprintf(str, "The user [%s] has been removed", user);
+    for (int i = 0; i < pdata->current_users; i++)
+    {
+        // The user that was remove will have a different message
+        if (strcmp(pdata->user_list[i].name, user) == 0)
+            continue;
 
-    printf("No user with the username [%s] found.\n", user);
-    return;
+        sendResponse(0, "Info", str, pdata->user_list[i]);
+    }
+    return index;
 }
 
 void acceptUsers(userData user, void *data)
@@ -109,8 +113,10 @@ void logoutUser(userData user, void *data)
     if (pthread_mutex_lock(pdata->mutex_users) != 0)
         printf("Lock users before remove user - logout\n");
 
-    if ((index = checkUserIsInList(user.name, pdata->user_list,
-                                   &pdata->current_users)) < 0)
+    if ((index = checkUserIsInList(
+             user.name,
+             pdata->user_list,
+             &pdata->current_users)) < 0)
     {
         // The user is not logged in
         return;

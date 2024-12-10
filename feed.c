@@ -1,10 +1,10 @@
 #include "feed.h"
 
 pthread_t t;
-TDATA data;
-
 int main(int argc, char **argv)
 {
+    TDATA data;
+
     // Removes the buffer in stdout, to show the messages as soon as the user receives them
     // Instead of waiting to fill the buffer
     setbuf(stdout, NULL);
@@ -14,11 +14,6 @@ int main(int argc, char **argv)
     sa.sa_sigaction = handleOverrideCancel;
     sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGINT, &sa, NULL);
-
-    struct sigaction sa1;
-    sa1.sa_sigaction = handle_closeService;
-    sa1.sa_flags = SA_RESTART | SA_SIGINFO;
-    sigaction(SIGUSR2, &sa1, NULL);
 
     data.stop = 0;
 
@@ -39,6 +34,7 @@ int main(int argc, char **argv)
     // Fill data from user
     data.user.pid = getpid();
     strcpy(msg.user, data.user.name);
+    printf("My pid: %d", data.user.pid);
 
     /* =============== SETUP THE FIFOS & LOGIN ===================== */
 
@@ -211,10 +207,13 @@ void *handleFifoCommunication(void *data)
 
     do
     {
-        if (!pdata->stop || read(pdata->fd_feed, &size, sizeof(int)) < 0)
+        if (read(pdata->fd_feed, &size, sizeof(int)) < 0)
             closeService("Unable to read from the server fifo", data);
 
-        if (!pdata->stop || (size > 0 && read(pdata->fd_feed, &resp, size) > 0))
+        if (pdata->stop)
+            continue;
+
+        if (size > 0 && read(pdata->fd_feed, &resp, size) > 0)
         {
             if (strcmp(resp.topic, "Topic List") == 0)
             {
@@ -232,7 +231,7 @@ void *handleFifoCommunication(void *data)
                 printf("%s [Warning] - %s\n", resp.user, resp.text);
                 closeService("", data);
             }
-            printf("%s %s - %s\n", resp.user, resp.topic, resp.text);
+            printf("%s -> %s: %s\n", resp.topic, resp.user, resp.text);
         }
     } while (!pdata->stop);
 
@@ -295,12 +294,13 @@ void sendMessage(msgData message, void *data)
         closeService("Unable to open the server pipe for reading.", data);
 
     msg_struct.type = MESSAGE;
-    msg_struct.user = pdata->user;
+    memcpy(&msg_struct.user, &pdata->user, sizeof(userData));
     msg_struct.message = message;
 
     // Calculate message size
     msg_struct.msg_size = CALCULATE_MSGDATA_SIZE(message.text);
     size = CALCULATE_MSG_SIZE(msg_struct.msg_size);
+    printf("%d\n", size);
     if (write(fd, &msg_struct, size) < 0)
     {
         close(fd);
@@ -309,11 +309,6 @@ void sendMessage(msgData message, void *data)
 
     close(fd);
     return;
-}
-
-void handle_closeService(int s, siginfo_t *i, void *v)
-{
-    closeService("Service ended by server", &data);
 }
 
 void closeService(char *msg, void *data)

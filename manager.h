@@ -61,7 +61,7 @@ int sendResponse(int time, char *topic, char *text, userData user);
 /**
  * @note does NOT need mutex_lock
  */
-void removeUser(char *user, void *data);
+int removeUser(char *user, void *data);
 
 void acceptUsers(userData user, void *data);
 
@@ -82,6 +82,7 @@ int checkUserIsInList(char *user, userData *user_list, int *user_count);
  * @return the index where the new users was added
  */
 int addUserToList(userData user, userData *user_list, int *user_count);
+
 /**
  * Removes one user from the list and clears the memory
  */
@@ -107,13 +108,21 @@ int createNewTopic(char *topic_name, topic *topic_list, int *topic_count);
 
 /**
  * Removes the topic and clears the data
- * @returns the current number of topics
+ * @returns the number of topics
  */
 int clearEmptyTopics(topic *topic_list, int *current_topics);
 
 /* ============= HANDLING MESSAGES ================ */
 
-int addNewPersistentMessage();
+/**
+ * @returns the index the new message was added
+ */
+int addNewPersistentMessage(msgData message, msgData *message_list, int *message_count);
+
+/**
+ * Removes the message and clears the data
+ */
+void removeMessage(msgData *msg_list, int *msg_count, int index);
 
 void showPersistantMessagesInTopic(char *topic, void *data);
 

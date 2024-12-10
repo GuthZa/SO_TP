@@ -52,8 +52,8 @@ void getFromFile(void *data)
         fgets(msg.text, MSG_MAX_SIZE, fptr);
         addNewPersistentMessage(msg, pdata->topic_list[topic_count].persist_msg,
                                 &pdata->topic_list[topic_count].persistent_msg_count);
-        printf("New message from file\n%s %s %d %s",
-               msg.topic, msg.user, msg.time, msg.text);
+        // printf("New message from file\n%s %s %d %s\n",
+        //        msg.topic, msg.user, msg.time, msg.text);
     }
 
     fclose(fptr);
@@ -81,20 +81,12 @@ void saveToFile(void *data)
     {
         for (int j = 0; j < pdata->topic_list[i].persistent_msg_count; j++)
         {
-            if (i < pdata->current_topics - 1)
-                fprintf(fptr,
-                        "%s %s %d %s\n",
-                        pdata->topic_list[i].persist_msg[j].topic,
-                        pdata->topic_list[i].persist_msg[j].user,
-                        pdata->topic_list[i].persist_msg[j].time,
-                        pdata->topic_list[i].persist_msg[j].text);
-            else
-                fprintf(fptr,
-                        "%s %s %d %s",
-                        pdata->topic_list[i].persist_msg[j].topic,
-                        pdata->topic_list[i].persist_msg[j].user,
-                        pdata->topic_list[i].persist_msg[j].time,
-                        pdata->topic_list[i].persist_msg[j].text);
+            fprintf(fptr,
+                    "%s %s %d %s\n",
+                    pdata->topic_list[i].persist_msg[j].topic,
+                    pdata->topic_list[i].persist_msg[j].user,
+                    pdata->topic_list[i].persist_msg[j].time,
+                    pdata->topic_list[i].persist_msg[j].text);
         }
     }
 
