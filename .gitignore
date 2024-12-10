@@ -1,4 +1,3 @@
-makefile
 *.txt
 .vscode
 *.o

@@ -32,16 +32,9 @@ void decreaseMessageTimeOnTopic(topic *topic_list, int topic_count, int *time)
         topic_list[topic_count - 1].persist_msg[i].time -= *time;
         if (topic_list[topic_count - 1].persist_msg[i].time <= 0)
         {
-            // Swap and remove the expired message
-            if (i < last_message)
-            {
-                memcpy(&topic_list[topic_count - 1].persist_msg[i],
-                       &topic_list[topic_count - 1].persist_msg[last_message],
-                       sizeof(msgData));
-            }
-            memset(&topic_list[topic_count - 1].persist_msg[last_message],
-                   0, sizeof(msgData));
-            topic_list[topic_count - 1].persistent_msg_count--;
+            removeMessage(topic_list[topic_count - 1].persist_msg,
+                          &topic_list[topic_count - 1].persistent_msg_count,
+                          i);
         }
     }
     (*time) = 0;
@@ -51,7 +44,7 @@ void decreaseMessageTimeOnTopic(topic *topic_list, int topic_count, int *time)
 void removeMessage(msgData *msg_list, int *msg_count, int index)
 {
     // Swap and remove the expired message
-    if (index < *msg_count)
+    if (index < *msg_count - 1)
     {
         memcpy(&msg_list[index],
                &msg_list[*msg_count - 1],
@@ -128,7 +121,10 @@ void handleNewMessage(msgData message, int msg_size, userData user, void *data)
     char str[MSG_MAX_SIZE];
     //? confirm if the user is logged in
 
-    int index_topics = checkTopicExists(message.topic, pdata->topic_list, pdata->current_topics);
+    int index_topics = checkTopicExists(
+        message.topic,
+        pdata->topic_list,
+        pdata->current_topics);
     if (index_topics < 0)
     {
         sprintf(str, "You're not subscribe to the topic %s", message.topic);
@@ -136,8 +132,10 @@ void handleNewMessage(msgData message, int msg_size, userData user, void *data)
         return;
     }
 
-    int index_user = checkUserIsInList(user.name, pdata->topic_list[index_topics].subscribed_users,
-                                       &pdata->topic_list[index_topics].subscribed_user_count);
+    int index_user = checkUserIsInList(
+        user.name,
+        pdata->topic_list[index_topics].subscribed_users,
+        &pdata->topic_list[index_topics].subscribed_user_count);
     if (index < 0)
     {
         sprintf(str, "You're not subscribe to the topic %s", message.topic);
@@ -148,8 +146,10 @@ void handleNewMessage(msgData message, int msg_size, userData user, void *data)
     if (message.time > 0)
     {
         printf("Added new persistent message on topic <%s>\n", message.topic);
-        addNewPersistentMessage(message, pdata->topic_list[index_topics].persist_msg,
-                                &pdata->topic_list[index_topics].persistent_msg_count);
+        addNewPersistentMessage(
+            message,
+            pdata->topic_list[index_topics].persist_msg,
+            &pdata->topic_list[index_topics].persistent_msg_count);
     }
 
     printf("Sent confirmation to user [%s]\n", user.name);
@@ -161,6 +161,7 @@ void handleNewMessage(msgData message, int msg_size, userData user, void *data)
         {
             printf("Sending user message to user [%s]\n",
                    pdata->topic_list[index_topics].subscribed_users[i].name);
+                   
             sendResponse(message.time, message.topic, message.text,
                          pdata->topic_list[index_topics].subscribed_users[i]);
         }
