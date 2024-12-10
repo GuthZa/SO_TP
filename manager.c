@@ -393,21 +393,6 @@ void *handleFifoCommunication(void *data)
     pthread_exit(NULL);
 }
 
-void signal_EndService(void *data)
-{
-    TDATA *pdata = (TDATA *)data;
-    union sigval val;
-    val.sival_int = -1;
-    if (pthread_mutex_lock(pdata->mutex_users) != 0)
-        printf("Locking users to signal user\n");
-
-    for (int j = 0; j < pdata->current_users; j++)
-        sigqueue(pdata->user_list[j].pid, SIGUSR2, val);
-
-    if (pthread_mutex_unlock(pdata->mutex_users) != 0)
-        printf("Unlock users to signal user\n");
-}
-
 void closeService(char *msg, void *data)
 {
     TDATA *pdata = (TDATA *)data;

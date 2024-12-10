@@ -149,3 +149,19 @@ void logoutUser(userData user, void *data)
         printf("Unlock topics after remove user from topic - logout\n");
     return;
 }
+
+void signal_EndService(void *data)
+{
+    TDATA *pdata = (TDATA *)data;
+    char str[MSG_MAX_SIZE];
+    if (pthread_mutex_lock(pdata->mutex_users) != 0)
+        printf("Locking users to signal user\n");
+
+    for (int i = 0; i < pdata->current_users; i++)
+    {
+        sendResponse(0, "Close", "Manager is closing.", pdata->user_list[i]);
+    }
+
+    if (pthread_mutex_unlock(pdata->mutex_users) != 0)
+        printf("Unlock users to signal user\n");
+}

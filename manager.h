@@ -163,8 +163,6 @@ void lockUnlockTopic(char *topic, int isToLock, void *data);
 void writeTopicList(userData user, void *data);
 
 /**
- * ?Send message
- *
  * @note Sends a signal to all users that the manager is closing
  */
 void signal_EndService(void *data);
