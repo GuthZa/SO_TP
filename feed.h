@@ -21,7 +21,7 @@ typedef struct
 /**
  * Already calculates the size required | handles the fifo to write
  */
-void sendMessage(char *topic, int time, char *text, void *data);
+void sendMessage(msgData message, void *data);
 
 /**
  * Already calculates the size required | handles the fifo to write

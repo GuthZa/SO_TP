@@ -3,7 +3,7 @@
 pthread_t t;
 TDATA data;
 
-int main()
+int main(int argc, char **argv)
 {
     // Removes the buffer in stdout, to show the messages as soon as the user receives them
     // Instead of waiting to fill the buffer
@@ -22,30 +22,32 @@ int main()
 
     data.stop = 0;
 
+    /* =================== HANDLES LOGIN ===================== */
+
+    msgData msg;
+    if (argc != 2)
+    {
+        printf("Please write your username with no spaces\n\t %s <username>\n");
+        exit(EXIT_FAILURE);
+    }
+    strcpy(data.user.name, argv[1]);
+    REMOVE_TRAILING_ENTER(data.user.name);
+    if (strcmp(data.user.name, "exit") == 0)
+        exit(EXIT_SUCCESS);
+
+    memset(msg.user, 0, USER_MAX_SIZE);
+    // Fill data from user
+    data.user.pid = getpid();
+    strcpy(msg.user, data.user.name);
+
+    /* =============== SETUP THE FIFOS & LOGIN ===================== */
+
     if (access(MANAGER_FIFO, F_OK) != 0)
     {
         printf("[Error] Server is currently down.\n");
         exit(EXIT_FAILURE);
     }
 
-    /* =================== HANDLES LOGIN ===================== */
-    msgData msg;
-    printf("\nHello!\n\nPlease enter your username: ");
-    if (scanf("%s", data.user.name) > 1)
-    {
-        printf("Please write a username with no spaces.");
-        exit(EXIT_FAILURE);
-    }
-
-    REMOVE_TRAILING_ENTER(data.user.name);
-    if (strcmp(data.user.name, "exit") == 0)
-        exit(EXIT_SUCCESS);
-
-    // Fill data from user
-    data.user.pid = getpid();
-    strcpy(msg.user, data.user.name);
-
-    /* =============== SETUP THE PIPES & LOGIN ===================== */
     // Checks there's a pipe with the same pid or creates one
     sprintf(data.fifoName, FEED_FIFO, getpid());
     createFifo(data.fifoName);
@@ -61,50 +63,102 @@ int main()
 
     /* ====================== SERVICE START ======================== */
 
-    char command[400], *args[4], *tok;
-    int size = 0;
+    char user_input[400], command[15];
+    char *p_str, *p_args;
+    int str_index, size;
 
     do
     {
-        if (read(STDIN_FILENO, command, 400) < 0)
+        // Guarantees no trash is left in input
+        memset(msg.text, 0, MSG_MAX_SIZE * sizeof(char));
+        memset(msg.topic, 0, TOPIC_MAX_SIZE * sizeof(char));
+        memset(user_input, 0, 400 * sizeof(char));
+        memset(command, 0, 15 * sizeof(char));
+        msg.time = 0;
+        if (read(STDIN_FILENO, user_input, 400) < 0)
         {
             closeService("Error while receiving input", &data);
         }
-        tok = strtok(command, " ");
-        while (tok != NULL)
-        {
-            args[size++] = tok;
-            tok = strtok(NULL, " ");
-            if (size > 2)
-                break;
-        }
-        REMOVE_TRAILING_ENTER(args[size - 1]);
-        printf("%s", args[3]);
 
-        if (strcmp(args[0], "exit") == 0)
+        p_str = user_input;
+
+        // checks user input for spaces and enter characters
+        str_index = strcspn(p_str, " \n");
+        // Increases the index by on to skip the space
+        strncpy(command, p_str, str_index++);
+        p_str += str_index;
+
+        REMOVE_TRAILING_ENTER(command);
+
+        if (strcmp(command, "exit") == 0)
         {
             closeService("Logging off...\n", &data);
         }
-        if (strcmp(args[0], "msg") == 0)
+        if (strcmp(command, "msg") == 0)
         {
-            if (size < 4)
+            /* ------------- Read Topic ------------- */
+            // checks user input for spaces and enter characters
+            str_index = strcspn(p_str, " \n");
+            // It read an end string, it's missing information
+            size = strlen(user_input);
+            // Increases the index to skip the space
+            strncpy(msg.topic, p_str, str_index++);
+            p_str += str_index;
+            if (str_index == size ||
+                str_index > TOPIC_MAX_SIZE ||
+                strlen(msg.topic) <= 0)
             {
                 printf("Invalid command\n");
                 printf("%s <topic> <duration> <message>\n", command);
                 continue;
             }
 
-            sendMessage(args[1], atoi(args[2]), args[3], &data);
+            /* ------------- Read Time ------------- */
+            // checks user input for spaces and enter characters
+            str_index = strcspn(p_str, " \n");
+            msg.time = atoi(p_str);
+            // It read an end string, it's missing information
+            if (str_index == size ||
+                msg.time < 0 ||
+                msg.time > 999)
+            {
+                printf("Invalid command\n");
+                printf("%s <topic> <duration> <message>\n", command);
+                continue;
+            }
+            // Increases the index to skip the space
+            p_str += str_index + 1;
+
+            /* ------------- Read Msg ------------- */
+            str_index = strcspn(p_str, "\n");
+            strncpy(msg.text, p_str, str_index);
+
+            // It read an end string, it's missing information
+            if (str_index > MSG_MAX_SIZE ||
+                strlen(msg.text) <= 0)
+            {
+                printf("Invalid command\n");
+                printf("%s <topic> <duration> <message>\n", command);
+                continue;
+            }
+
+            sendMessage(msg, &data);
         }
-        else if (strcmp(args[0], "subscribe") == 0)
+        else if (strcmp(command, "subscribe") == 0)
         {
-            if (size < 2)
+            /* ------------- Read Topic ------------- */
+            // checks user input for spaces and enter characters
+            str_index = strcspn(p_str, " \n");
+            // Increases the index to skip the space
+            strncpy(msg.topic, p_str, str_index++);
+            // It read an end string, it's missing information
+            if (str_index == strlen(user_input) ||
+                str_index > TOPIC_MAX_SIZE)
             {
                 printf("Invalid command\n");
                 printf("%s <topic>\n", command);
                 continue;
             }
-
             // char c = 'a';
             // for (int i = 0; i < 20; i++)
             // {
@@ -112,24 +166,31 @@ int main()
             //     sendSubscribeUnsubscribe(SUBSCRIBE, msg.topic, &data);
             // }
 
-            sendSubscribeUnsubscribe(SUBSCRIBE, args[1], &data);
+            sendSubscribeUnsubscribe(SUBSCRIBE, msg.topic, &data);
         }
-        else if (strcmp(args[0], "unsubscribe") == 0)
+        else if (strcmp(command, "unsubscribe") == 0)
         {
-            if (size < 2)
+            /* ------------- Read Topic ------------- */
+            // checks user input for spaces and enter characters
+            str_index = strcspn(p_str, " \n");
+            // Increases the index to skip the space
+            strncpy(msg.topic, p_str, str_index++);
+            // It read an end string, it's missing information
+            if (str_index == strlen(user_input) ||
+                str_index > TOPIC_MAX_SIZE)
             {
                 printf("Invalid command\n");
                 printf("%s <topic>\n", command);
                 continue;
             }
 
-            sendSubscribeUnsubscribe(UNSUBSCRIBE, args[1], &data);
+            sendSubscribeUnsubscribe(UNSUBSCRIBE, msg.topic, &data);
         }
-        else if (strcmp(args[0], "topics") == 0)
+        else if (strcmp(command, "topics") == 0)
         {
             sendRequest(LIST, &data);
         }
-        else if (strcmp(args[0], "help") == 0)
+        else if (strcmp(command, "help") == 0)
         {
             printf("topics - Lists the existing topics\n");
             printf("msg <topic> <duration> \"message\" - To send a message to the <topic>\n\tUse 0 for non-persistent messages\n");
@@ -137,11 +198,10 @@ int main()
             printf("unsubscribe <topic> - To stop receiving messages from the <topic>\n");
             printf("exit - closes the app\n");
         }
-        // Reseting user input
-        for (int i = 0; i < 4; i++)
-            args[4] = "\0";
-        tok = "\0";
-        size = 0;
+        else
+        {
+            printf("Command unknown, press help for a list of available commands\n");
+        }
     } while (1);
     exit(EXIT_SUCCESS);
 }
@@ -171,11 +231,12 @@ void *handleFifoCommunication(void *data)
             }
 
             REMOVE_TRAILING_ENTER(resp.text);
-
-            printf("%s %s - %s\n", resp.user, resp.topic, resp.text);
-            if (strcmp(resp.topic, "Warning") == 0 ||
-                strcmp(resp.topic, "Close") == 0)
+            if (strcmp(resp.topic, "Close") == 0)
+            {
+                printf("%s [Warning] - %s\n", resp.user, resp.text);
                 closeService("", data);
+            }
+            printf("%s %s - %s\n", resp.user, resp.topic, resp.text);
         }
     } while (!pdata->stop);
 
@@ -228,7 +289,7 @@ void sendSubscribeUnsubscribe(msgType type, char *topic, void *data)
     return;
 }
 
-void sendMessage(char *topic, int time, char *text, void *data)
+void sendMessage(msgData message, void *data)
 {
     TDATA *pdata = (TDATA *)data;
     messageStruct msg_struct;
@@ -239,13 +300,14 @@ void sendMessage(char *topic, int time, char *text, void *data)
 
     msg_struct.type = MESSAGE;
     msg_struct.user = pdata->user;
-    strcpy(msg_struct.message.text, text);
-    strcpy(msg_struct.message.topic, topic);
-    memcpy(&msg_struct.message.time, &time, sizeof(int));
-    strcpy(msg_struct.message.user, pdata->user.name);
-    memcpy(&msg_struct.user, &pdata->user, sizeof(userData));
+    msg_struct.message = message;
+    // strcpy(msg_struct.message.text, text);
+    // strcpy(msg_struct.message.topic, topic);
+    // memcpy(&msg_struct.message.time, &time, sizeof(int));
+    // memcpy(&msg_struct.user, &pdata->user, sizeof(userData));
+
     // Calculate message size
-    msg_struct.msg_size = CALCULATE_MSGDATA_SIZE(text);
+    msg_struct.msg_size = CALCULATE_MSGDATA_SIZE(message.text);
     size = CALCULATE_MSG_SIZE(msg_struct.msg_size);
     if (write(fd, &msg_struct, size) < 0)
     {
@@ -285,3 +347,26 @@ void closeService(char *msg, void *data)
     unlink(pdata->fifoName);
     exit(EXIT_FAILURE);
 }
+
+// void createFifo(char *fifo)
+// {
+//     // Checks if fifo exists
+//     if (access(fifo, F_OK) == 0)
+//     {
+//         printf("[Error] Pipe is already open\n");
+//         exit(EXIT_FAILURE);
+//     }
+//     // creates it
+//     if (mkfifo(fifo, 0660) == -1)
+//     {
+//         printf("[Error] Unable to open the named fifo\n");
+//         if (errno == EEXIST)
+//             printf("[Warning] Named fifo already exists or the program is ope.\n");
+//         exit(EXIT_FAILURE);
+//     }
+// }
+
+// void handleOverrideCancel(int s, siginfo_t *i, void *v)
+// {
+//     printf("Please type exit\n");
+// }

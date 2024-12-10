@@ -11,9 +11,9 @@ void createFifo(char *fifo)
     // creates it
     if (mkfifo(fifo, 0660) == -1)
     {
-        printf("[Error] Unable to open the named fifo\n");
         if (errno == EEXIST)
             printf("[Warning] Named fifo already exists or the program is ope.\n");
+        printf("[Error] Unable to open the named fifo\n");
         exit(EXIT_FAILURE);
     }
 }

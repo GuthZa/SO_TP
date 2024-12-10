@@ -5,49 +5,47 @@ void *updateMessageCounter(void *data)
     TDATA *pdata = (TDATA *)data;
     do
     {
-        if (pdata->isDev)
+        if (pthread_mutex_lock(pdata->mutex_topics) != 0)
             printf("Lock topics before update time\n");
-        pthread_mutex_lock(pdata->mutex_topics);
 
-        if (pdata->isDev)
-            printf("Decreasing time\n");
-        for (int j = 0; j < pdata->current_topics; j++)
+        pdata->delta_time++;
+
+        if (pdata->delta_time > MAX_DELTA_TIME)
         {
-            decreaseMessageTimeOnTopic(&pdata->topic_list[j]);
+            decreaseMessageTimeOnTopic(pdata->topic_list, pdata->current_topics, &pdata->delta_time);
+            clearEmptyTopics(pdata->topic_list, &pdata->current_topics);
         }
 
-        if (pdata->isDev)
-            printf("Clearing topics\n");
-        clearEmptyTopics(pdata->topic_list, &pdata->current_topics);
-
-        pthread_mutex_unlock(pdata->mutex_topics);
-        if (pdata->isDev)
+        if (pthread_mutex_unlock(pdata->mutex_topics) != 0)
             printf("Unlock topics after update time\n");
         sleep(1);
     } while (!pdata->stop);
     pthread_exit(NULL);
 }
 
-void decreaseMessageTimeOnTopic(topic *current_topic)
+void decreaseMessageTimeOnTopic(topic *topic_list, int topic_count, int *time)
 {
-    int last_message = current_topic->persistent_msg_count - 1;
-    for (int i = 0; i < current_topic->persistent_msg_count; i++)
+    int last_message = topic_list[topic_count - 1].persistent_msg_count - 1;
+
+    for (int i = 0; i < topic_list[topic_count - 1].persistent_msg_count; i++)
     {
-        current_topic->persist_msg[i].time--;
-        if (current_topic->persist_msg[i].time <= 0)
+        topic_list[topic_count - 1].persist_msg[i].time -= *time;
+        if (topic_list[topic_count - 1].persist_msg[i].time <= 0)
         {
             // Swap and remove the expired message
             if (i < last_message)
             {
-                memcpy(&current_topic->persist_msg[i],
-                       &current_topic->persist_msg[last_message],
+                memcpy(&topic_list[topic_count - 1].persist_msg[i],
+                       &topic_list[topic_count - 1].persist_msg[last_message],
                        sizeof(msgData));
             }
-            memset(&current_topic->persist_msg[last_message],
+            memset(&topic_list[topic_count - 1].persist_msg[last_message],
                    0, sizeof(msgData));
-            current_topic->persistent_msg_count--;
+            topic_list[topic_count - 1].persistent_msg_count--;
         }
     }
+    (*time) = 0;
+    return;
 }
 
 int sendResponse(int time, char *topic, char *text, userData user)
@@ -81,21 +79,52 @@ int sendResponse(int time, char *topic, char *text, userData user)
 void showPersistantMessagesInTopic(char *topic, void *data)
 {
     TDATA *pdata = (TDATA *)data;
-    for (int i = 0; i < pdata->current_topics; i++)
+    int index = checkTopicExists(topic, pdata->topic_list, pdata->current_topics);
+    if (index > 0)
     {
-        if (strcmp(pdata->topic_list[i].topic, topic) == 0)
+        for (int j = 0; j < pdata->topic_list[index].persistent_msg_count; j++)
         {
-            for (int j = 0; j < pdata->topic_list[i].persistent_msg_count; j++)
-            {
-                printf("%d: From [%s] with %d time left\n \t%s\n", i,
-                       pdata->topic_list[i].persist_msg[j].user,
-                       pdata->topic_list[i].persist_msg[j].time,
-                       pdata->topic_list[i].persist_msg[j].text);
-            }
-            return;
+            printf("%d: From [%s] with %d time left\n \t%s\n", j,
+                   pdata->topic_list[index].persist_msg[j].user,
+                   pdata->topic_list[index].persist_msg[j].time,
+                   pdata->topic_list[index].persist_msg[j].text);
         }
     }
 
     printf("No topic <%s> was found\n", topic);
+    return;
+}
+
+void handleNewMessage(msgData message, int msg_size, void *data)
+{
+    TDATA *pdata = (TDATA *)data;
+    int topic_index = 1;
+    int user_subscribed = 0;
+    //? confirm if the user is logged in
+    if (pthread_mutex_lock(pdata->mutex_topics) != 0)
+        printf("Lock topics before handling message\n");
+
+    for (int i = 0; i < pdata->current_topics; i++)
+    {
+        if (strcmp(pdata->topic_list[i].topic, message.topic) == 0)
+        {
+            for (int j = 0; j < pdata->topic_list[i].subscribed_user_count; j++)
+            {
+                if (strcmp(pdata->topic_list[i].subscribed_users[j].name, message.user) == 0)
+                {
+                    if (message.time != 0)
+                    {
+                        memcpy(&pdata->topic_list[i].persist_msg[pdata->topic_list[i].persistent_msg_count],
+                               &message, sizeof(msgData));
+                    }
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    if (pthread_mutex_unlock(pdata->mutex_topics) != 0)
+        printf("Unlock topics before handling message\n");
     return;
 }

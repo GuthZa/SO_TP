@@ -1,5 +1,14 @@
 #include "manager.h"
 
+int checkTopicExists(char *topic_name, topic *topic_list, int topic_count)
+{
+    for (int i = 0; i < topic_count; i++)
+        if (strcmp(topic_list[i].topic, topic_name) == 0)
+            return i;
+
+    return -1;
+}
+
 int clearEmptyTopics(topic *topic_list, int *current_topics)
 {
     int last_topic = *current_topics - 1;
@@ -17,10 +26,7 @@ int clearEmptyTopics(topic *topic_list, int *current_topics)
             memset(&topic_list[last_topic], 0, sizeof(topic));
             (*current_topics)--;
         }
-        else
-        {
-            i++;
-        }
+        i++;
     }
 
     return *current_topics;
@@ -28,122 +34,109 @@ int clearEmptyTopics(topic *topic_list, int *current_topics)
 
 void subscribeUser(userData user, char *topic_name, void *data)
 {
-    //! If a diff user tries to subscribe, it does not subscribe them
-
-    //* Maybe guarantee that it also exists on user_list
+    //! 2 users can't subscribe to the same topic
     TDATA *pdata = (TDATA *)data;
     char str[MSG_MAX_SIZE];
+    strcpy(user.name, "[Server]");
 
     if (pdata->current_topics >= TOPIC_MAX_SIZE)
     {
-        sprintf(str,
-                "We have the maximum number of topic. The topic %s will not be created",
-                topic_name);
-        strcpy(user.name, "[Server]");
+        sprintf(str, "We have the maximum number of topic.", topic_name);
         sendResponse(0, "Info", str, user);
         return;
     }
 
-    int last_topic = pdata->current_topics;
-    int last_user;
-
-    for (int i = 0; i < last_topic; i++)
+    int index = checkTopicExists(topic_name,
+                                 pdata->topic_list,
+                                 pdata->current_topics);
+    if (index >= 0)
     {
-        if (strcmp(topic_name, pdata->topic_list[i].topic) == 0)
+        if (checkUserIsInList(user.name,
+                              pdata->topic_list[index].subscribed_users,
+                              &pdata->topic_list[index].subscribed_user_count) >= 0)
         {
-            for (int j = 0; j < pdata->topic_list[i].subscribed_user_count; j++)
-            {
-                if (strcmp(pdata->topic_list[i].subscribed_users[j].name, user.name) == 0)
-                {
-                    sprintf(str, "You're already subscribed to the topic %s", topic_name);
-                    strcpy(user.name, "[Server]");
-                    sendResponse(0, "Info", str, user);
-                    return;
-                }
-            }
-
-            last_user = pdata->topic_list[i].subscribed_user_count;
-
-            memcpy(&pdata->topic_list[i].subscribed_users[last_user],
-                   &user, sizeof(userData));
-
-            pdata->topic_list[i].subscribed_user_count++;
-
-            sprintf(str, "You have subscribed the topic %s", topic_name);
-            strcpy(user.name, "[Server]");
+            sprintf(str, "You're already subscribed to the topic %s", topic_name);
             sendResponse(0, "Info", str, user);
             return;
         }
     }
-    createNewTopic(&pdata->topic_list[last_topic], topic_name, data);
-    last_user = pdata->topic_list[last_topic].subscribed_user_count;
+    else
+    {
+        index = createNewTopic(topic_name,
+                               pdata->topic_list,
+                               &pdata->current_topics);
+        printf("New topic created: %s\n", pdata->topic_list[index].topic);
+    }
 
-    memcpy(&pdata->topic_list[last_topic].subscribed_users[last_user],
-           &user, sizeof(userData));
-
-    pdata->topic_list[last_topic].subscribed_user_count++;
-    pdata->current_topics++;
+    addUserToList(user, pdata->topic_list[index].subscribed_users,
+                  &pdata->topic_list[index].subscribed_user_count);
 
     sprintf(str, "You have subscribed the topic %s", topic_name);
-    strcpy(user.name, "[Server]");
     sendResponse(0, "Info", str, user);
-
     return;
 }
 
 void unsubscribeUser(userData user, char *topic_name, void *data)
 {
-    //* Maybe guarantee that it also exists on user_list
+    //! Feed is getting stuck after unsubscribing
     TDATA *pdata = (TDATA *)data;
     char str[USER_MAX_SIZE];
+    int index;
     strcpy(user.name, "[Server]");
 
-    int last_topic = pdata->current_topics;
-    for (int i = 0; i < last_topic; i++)
+    index = checkTopicExists(topic_name, pdata->topic_list, pdata->current_topics);
+    if (index < 0)
     {
-        if (strcmp(topic_name, pdata->topic_list[i].topic) == 0)
-        {
-            if (removeUserFromList(
-                    pdata->topic_list[i].subscribed_users,
-                    &pdata->topic_list[i].subscribed_user_count,
-                    user.pid))
-            {
-                sprintf(str, "You're not subscribed to the topic %s", topic_name);
-                sendResponse(0, "Info", str, user);
-                return;
-            }
-        }
+        sprintf(str, "The topic %s does not exist", topic_name);
+        sendResponse(0, "Info", str, user);
+        return;
     }
+
+    index = checkUserIsInList(user.name,
+                              pdata->topic_list[index].subscribed_users,
+                              &pdata->topic_list[index].subscribed_user_count);
+    if (index == -1)
+    {
+        sprintf(str, "You're not subscribed to the topic %s", topic_name);
+        sendResponse(0, "Info", str, user);
+        return;
+    }
+
+    removeUserFromList(pdata->topic_list[index].subscribed_users,
+                       &pdata->topic_list[index].subscribed_user_count,
+                       index);
+
     sprintf(str, "You've unsubscribed to the topic %s", topic_name);
     sendResponse(0, "Info", str, user);
     return;
 }
 
-void createNewTopic(topic *new_topic, char *topic_name, void *data)
+int createNewTopic(char *topic_name, topic *topic_list, int *topic_count)
 {
-    new_topic->is_topic_locked = 0;
-    strncpy(new_topic->topic, topic_name, TOPIC_MAX_SIZE);
-    new_topic->persistent_msg_count = 0;
-    new_topic->subscribed_user_count = 0;
+    topic_list[*topic_count].is_topic_locked = 0;
+    strncpy(topic_list[*topic_count].topic, topic_name, TOPIC_MAX_SIZE);
+    topic_list[*topic_count].persistent_msg_count = 0;
+    topic_list[*topic_count].subscribed_user_count = 0;
+    (*topic_count)++;
+    return *topic_count - 1;
 }
 
 void lockUnlockTopic(char *topic, int isToLock, void *data)
 {
     TDATA *pdata = (TDATA *)data;
+    int index = checkTopicExists(topic,
+                                 pdata->topic_list,
+                                 pdata->current_topics);
 
-    for (int i = 0; i < pdata->current_topics; i++)
+    if (index != -1)
     {
-        if (strcmp(pdata->topic_list[i].topic, topic) == 0)
-        {
-            pdata->topic_list[i].is_topic_locked = isToLock;
-            if (isToLock)
-                printf("Topic <%s> was locked.\n", topic);
-            else if (!isToLock)
-                printf("Topic <%s> was unlocked.\n", topic);
-            return;
-        }
+        pdata->topic_list[index].is_topic_locked = isToLock;
+        if (isToLock)
+            printf("Topic <%s> was locked.\n", topic);
+        else if (!isToLock)
+            printf("Topic <%s> was unlocked.\n", topic);
+        return;
     }
-
     printf("No topic <%s> was found.\n", topic);
     return;
 }

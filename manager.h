@@ -1,6 +1,7 @@
 #include "helper.h"
 
 #define MAX_PERSIST_MSG 5
+#define MAX_DELTA_TIME 5 // seconds
 
 /**
  * @param topic string
@@ -25,6 +26,7 @@ typedef struct
 /**
  * @param stop int flag to terminate thread
  * @param fd_manager int to be able to send exit message to thread
+ * @param delta_time used to incrase time in messages
  * @param user_list userData list of users logged in
  * @param current_users int number of existing users
  * @param topic_list topic list of topics
@@ -38,34 +40,34 @@ typedef struct
 {
     int stop;
     int fd_manager;
+    int delta_time;
     topic topic_list[TOPIC_MAX_SIZE];
     int current_topics;
     userData user_list[MAX_USERS];
     int current_users;
     pthread_mutex_t *mutex_users;
     pthread_mutex_t *mutex_topics;
-    int isDev;
 } TDATA;
 
 /* ===================== RESPONSES AND REQUESTS ======================= */
+
+/**
+ * @note does NOT need mutex
+ */
+void handleNewMessage(msgData message, int msg_size, void *data);
 
 /**
  * @returns -1 on an error, sent bytes otherwise
  */
 int sendResponse(int time, char *topic, char *text, userData user);
 
-/**
- * ?Send message
- *
- * @note Sends a signal to all users that the manager is closing
- */
-void signal_EndService(void *data);
-
 /* ======================== HANDLING USERS ============================ */
 
 /**
- *
+ * @note does NOT need mutex_lock
  */
+void removeUser(char *user, void *data);
+
 void acceptUsers(userData user, void *data);
 
 /**
@@ -77,10 +79,18 @@ void acceptUsers(userData user, void *data);
 void logoutUser(userData user, void *data);
 
 /**
- * Removes one user from the list and clears the memory
- * @returns 0 if NO user was removed, 1 otherwise
+ * @returns -1 if the user is NOT in the list, it's position otherwise
  */
-int removeUserFromList(userData *user_list, int *user_count, int pid);
+int checkUserIsInList(char *user, userData *user_list, int *user_count);
+
+/**
+ * @return the index where the new users was added
+ */
+int addUserToList(userData user, userData *user_list, int *user_count);
+/**
+ * Removes one user from the list and clears the memory
+ */
+void removeUserFromList(userData *user_list, int *user_count, int index);
 
 void subscribeUser(userData user, char *topic, void *data);
 
@@ -89,9 +99,16 @@ void unsubscribeUser(userData user, char *topic_name, void *data);
 /* ========================= HANDLING TOPICS ========================== */
 
 /**
- * Function to guarantee that there's no trash information in the struct
+ * @returns -1 if the topic is NOT in the list, it's position otherwise
  */
-void createNewTopic(topic *new_topic, char *topic_name, void *data);
+int checkTopicExists(char *topic_name, topic *topic_list, int topic_count);
+
+/**
+ * Function to guarantee that there's no trash information in the struct
+ *
+ * @returns the index where the new topic was created
+ */
+int createNewTopic(char *topic_name, topic *topic_list, int *topic_count);
 
 /**
  * Removes the topic and clears the data
@@ -103,7 +120,7 @@ int clearEmptyTopics(topic *topic_list, int *current_topics);
 // Handles updating, remove expired messages and topics
 void *updateMessageCounter(void *data);
 
-void decreaseMessageTimeOnTopic(topic *current_topic);
+void decreaseMessageTimeOnTopic(topic *current_topic, int topic_count, int *time);
 
 /* ========================= HANDLING FILES =========================== */
 
@@ -132,6 +149,8 @@ void lockUnlockTopic(char *topic, int isToLock, void *data);
 void writeTopicList(userData user, void *data);
 
 /**
- * @note does NOT need mutex_lock
+ * ?Send message
+ *
+ * @note Sends a signal to all users that the manager is closing
  */
-void checkUserExistsAndLogOut(char *user, void *data);
+void signal_EndService(void *data);

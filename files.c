@@ -19,6 +19,8 @@ void getFromFile(void *data)
 
     int msg_count = 0, topic_count = 0, firstLine = 1, size;
     char temp_topic[20];
+    //? Check if it read more msgs/topics that it is limit
+    // if it did, discard them?
     while (!feof(fptr))
     {
         if (fscanf(fptr, "%s", temp_topic) < 0)
@@ -27,20 +29,12 @@ void getFromFile(void *data)
             printf("Nothing was read from the save file\n");
             return;
         }
-        if (strcmp(temp_topic, pdata->topic_list[topic_count].topic) != 0)
+        topic_count = checkTopicExists(temp_topic, pdata->topic_list, pdata->current_topics);
+        if (topic_count == -1)
         {
-            if (!firstLine)
-                topic_count++;
-            else
-                firstLine = 0;
-            createNewTopic(&pdata->topic_list[topic_count], temp_topic, data);
-            msg_count = 0;
+            createNewTopic(temp_topic, pdata->topic_list, &pdata->current_topics);
         }
 
-        strcpy(pdata->topic_list[topic_count].persist_msg[msg_count].topic,
-               temp_topic);
-        //? We can save this information somewhere in the file, eventually
-        pdata->topic_list[topic_count].is_topic_locked = 0;
         //! Do NOT remove the last space from the formatter
         // it "removes" the first space from the msg
         fscanf(fptr, "%s %d ",
