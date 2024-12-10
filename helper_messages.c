@@ -10,7 +10,7 @@ void *updateMessageCounter(void *data)
 
         pdata->delta_time++;
 
-        if (pdata->delta_time > MAX_DELTA_TIME)
+        if (pdata->delta_time > MAX_DELTA_TIME && pdata->current_topics > 0)
         {
             decreaseMessageTimeOnTopic(pdata->topic_list, pdata->current_topics, &pdata->delta_time);
             clearEmptyTopics(pdata->topic_list, &pdata->current_topics);
@@ -45,6 +45,20 @@ void decreaseMessageTimeOnTopic(topic *topic_list, int topic_count, int *time)
         }
     }
     (*time) = 0;
+    return;
+}
+
+void removeMessage(msgData *msg_list, int *msg_count, int index)
+{
+    // Swap and remove the expired message
+    if (index < *msg_count)
+    {
+        memcpy(&msg_list[index],
+               &msg_list[*msg_count - 1],
+               sizeof(msgData));
+    }
+    memset(&msg_list[*msg_count - 1], 0, sizeof(msgData));
+    (*msg_count)--;
     return;
 }
 
@@ -107,6 +121,8 @@ int addNewPersistentMessage(msgData message, msgData *message_list, int *message
 void handleNewMessage(msgData message, int msg_size, userData user, void *data)
 {
     TDATA *pdata = (TDATA *)data;
+    userData aux = user;
+    strcpy(aux.name, "[Server]");
     int topic_index = 1;
     int user_subscribed = 0;
     char str[MSG_MAX_SIZE];
@@ -116,7 +132,7 @@ void handleNewMessage(msgData message, int msg_size, userData user, void *data)
     if (index_topics < 0)
     {
         sprintf(str, "You're not subscribe to the topic %s", message.topic);
-        sendResponse(0, "Info", str, user);
+        sendResponse(0, "Info", str, aux);
         return;
     }
 
@@ -125,21 +141,29 @@ void handleNewMessage(msgData message, int msg_size, userData user, void *data)
     if (index < 0)
     {
         sprintf(str, "You're not subscribe to the topic %s", message.topic);
-        sendResponse(0, "Info", str, user);
+        sendResponse(0, "Info", str, aux);
         return;
     }
 
     if (message.time > 0)
+    {
+        printf("Added new persistent message on topic <%s>\n", message.topic);
         addNewPersistentMessage(message, pdata->topic_list[index_topics].persist_msg,
                                 &pdata->topic_list[index_topics].persistent_msg_count);
+    }
 
-    sendResponse(0, "Info", "Message received by the server", user);
+    printf("Sent confirmation to user [%s]\n", user.name);
+    sendResponse(0, "Info", "Message received by the server", aux);
 
     for (int i = 0; i < pdata->topic_list[index_topics].subscribed_user_count; i++)
     {
         if (strcmp(pdata->topic_list[index_topics].subscribed_users[i].name, user.name) != 0)
+        {
+            printf("Sending user message to user [%s]\n",
+                   pdata->topic_list[index_topics].subscribed_users[i].name);
             sendResponse(message.time, message.topic, message.text,
                          pdata->topic_list[index_topics].subscribed_users[i]);
+        }
     }
     return;
 }

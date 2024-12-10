@@ -353,7 +353,7 @@ void *handleFifoCommunication(void *data)
 
             // printf("text: %s\n", msg.text);
             // printf("topic: %s\n", msg.topic);
-            // printf("user: %s\n", msg.user);
+            printf("user: %s\n", msg.user);
             // printf("time: %d\n", msg.time);
             if (pthread_mutex_lock(pdata->mutex_topics) != 0)
                 printf("Lock topics before handling message\n");

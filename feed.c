@@ -211,10 +211,10 @@ void *handleFifoCommunication(void *data)
 
     do
     {
-        if (read(pdata->fd_feed, &size, sizeof(int)) < 0)
+        if (!pdata->stop || read(pdata->fd_feed, &size, sizeof(int)) < 0)
             closeService("Unable to read from the server fifo", data);
 
-        if (size > 0 && read(pdata->fd_feed, &resp, size) > 0)
+        if (!pdata->stop || (size > 0 && read(pdata->fd_feed, &resp, size) > 0))
         {
             if (strcmp(resp.topic, "Topic List") == 0)
             {
@@ -297,10 +297,6 @@ void sendMessage(msgData message, void *data)
     msg_struct.type = MESSAGE;
     msg_struct.user = pdata->user;
     msg_struct.message = message;
-    // strcpy(msg_struct.message.text, text);
-    // strcpy(msg_struct.message.topic, topic);
-    // memcpy(&msg_struct.message.time, &time, sizeof(int));
-    // memcpy(&msg_struct.user, &pdata->user, sizeof(userData));
 
     // Calculate message size
     msg_struct.msg_size = CALCULATE_MSGDATA_SIZE(message.text);
