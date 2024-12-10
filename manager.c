@@ -355,7 +355,13 @@ void *handleFifoCommunication(void *data)
             // printf("topic: %s\n", msg.topic);
             // printf("user: %s\n", msg.user);
             // printf("time: %d\n", msg.time);
-            handleNewMessage(msg, msg_size, data);
+            if (pthread_mutex_lock(pdata->mutex_topics) != 0)
+                printf("Lock topics before handling message\n");
+
+            handleNewMessage(msg, msg_size, user, data);
+
+            if (pthread_mutex_unlock(pdata->mutex_topics) != 0)
+                printf("Unlock topics before handling message\n");
             break;
         case LIST:
             size = read(fd, &user, sizeof(userData));
@@ -410,9 +416,6 @@ void closeService(char *msg, void *data)
     printf("Signaling users end of service...\n");
     signal_EndService(data);
 
-    printf("Saving data to file...\n");
-    saveToFile(data);
-
     printf("Stopping background processes...\n");
 
     msgType type = -1;
@@ -422,6 +425,10 @@ void closeService(char *msg, void *data)
     pthread_join(t[1], NULL);
     pthread_mutex_destroy(pdata->mutex_topics);
     pthread_mutex_destroy(pdata->mutex_users);
+
+    printf("Saving data to file...\n");
+    saveToFile(data);
+
     close(pdata->fd_manager);
     unlink(MANAGER_FIFO);
     exit(EXIT_FAILURE);

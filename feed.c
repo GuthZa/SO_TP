@@ -153,18 +153,13 @@ int main(int argc, char **argv)
             strncpy(msg.topic, p_str, str_index++);
             // It read an end string, it's missing information
             if (str_index == strlen(user_input) ||
-                str_index > TOPIC_MAX_SIZE)
+                str_index > TOPIC_MAX_SIZE ||
+                strlen(msg.topic) <= 0)
             {
                 printf("Invalid command\n");
                 printf("%s <topic>\n", command);
                 continue;
             }
-            // char c = 'a';
-            // for (int i = 0; i < 20; i++)
-            // {
-            //     sprintf(param, "%c", (c + i));
-            //     sendSubscribeUnsubscribe(SUBSCRIBE, msg.topic, &data);
-            // }
 
             sendSubscribeUnsubscribe(SUBSCRIBE, msg.topic, &data);
         }
@@ -177,7 +172,8 @@ int main(int argc, char **argv)
             strncpy(msg.topic, p_str, str_index++);
             // It read an end string, it's missing information
             if (str_index == strlen(user_input) ||
-                str_index > TOPIC_MAX_SIZE)
+                str_index > TOPIC_MAX_SIZE ||
+                strlen <= 0)
             {
                 printf("Invalid command\n");
                 printf("%s <topic>\n", command);
@@ -347,26 +343,3 @@ void closeService(char *msg, void *data)
     unlink(pdata->fifoName);
     exit(EXIT_FAILURE);
 }
-
-// void createFifo(char *fifo)
-// {
-//     // Checks if fifo exists
-//     if (access(fifo, F_OK) == 0)
-//     {
-//         printf("[Error] Pipe is already open\n");
-//         exit(EXIT_FAILURE);
-//     }
-//     // creates it
-//     if (mkfifo(fifo, 0660) == -1)
-//     {
-//         printf("[Error] Unable to open the named fifo\n");
-//         if (errno == EEXIST)
-//             printf("[Warning] Named fifo already exists or the program is ope.\n");
-//         exit(EXIT_FAILURE);
-//     }
-// }
-
-// void handleOverrideCancel(int s, siginfo_t *i, void *v)
-// {
-//     printf("Please type exit\n");
-// }

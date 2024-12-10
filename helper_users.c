@@ -1,6 +1,5 @@
 #include "manager.h"
 
-//*
 int checkUserIsInList(char *user, userData *user_list, int *user_count)
 {
     for (int i = 0; i < *user_count; i++)
@@ -72,6 +71,7 @@ void acceptUsers(userData user, void *data)
     if (pdata->current_users >= MAX_USERS)
     {
         sprintf(str, "We have reached the maximum users available. Please try again later");
+        printf("User [%s] with pid %d tried to login, max user reached!\n", user.name, user.pid);
         sendResponse(0, "Close", str, aux);
         return;
     }
@@ -82,15 +82,21 @@ void acceptUsers(userData user, void *data)
     if (index >= 0)
     {
         sprintf(str, "There's already a user using the chosen username");
+        printf("Duplicated user [%s] login\n", user.name, user.pid);
         sendResponse(0, "Close", str, aux);
         return;
     }
 
     sprintf(str, "%s!\n", user.name);
     // If there's an error confirming login, we discard the login attempt
-    if (sendResponse(0, "Welcome", str, aux) != -1)
+    if (sendResponse(0, "Welcome", str, aux) > 0)
+    {
         addUserToList(user, pdata->user_list, &pdata->current_users);
+        printf("New user [%s] with pid %d logged in\n", user.name, user.pid);
+        return;
+    }
 
+    printf("Unable to add the user [%s] with pid %d\n", user.name, user.pid);
     return;
 }
 
@@ -104,12 +110,15 @@ void logoutUser(userData user, void *data)
         printf("Lock users before remove user - logout\n");
 
     if ((index = checkUserIsInList(user.name, pdata->user_list,
-                                   &pdata->current_users)) >= 0)
+                                   &pdata->current_users)) < 0)
     {
-        removeUserFromList(pdata->user_list,
-                           &pdata->current_users,
-                           index);
+        // The user is not logged in
+        return;
     }
+    removeUserFromList(pdata->user_list,
+                       &pdata->current_users,
+                       index);
+
     if (pthread_mutex_unlock(pdata->mutex_users) != 0)
         printf("Unlock users after remove user - logout\n");
 

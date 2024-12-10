@@ -4,6 +4,7 @@ void getFromFile(void *data)
 {
     FILE *fptr;
     TDATA *pdata = (TDATA *)data;
+    msgData msg;
     char *file_name = getenv("MSG_FICH");
     if (file_name == NULL)
     {
@@ -18,43 +19,42 @@ void getFromFile(void *data)
     }
 
     int msg_count = 0, topic_count = 0, firstLine = 1, size;
-    char temp_topic[20];
     //? Check if it read more msgs/topics that it is limit
     // if it did, discard them?
     while (!feof(fptr))
     {
-        if (fscanf(fptr, "%s", temp_topic) < 0)
+        memset(msg.text, 0, MSG_MAX_SIZE * sizeof(char));
+        memset(msg.topic, 0, TOPIC_MAX_SIZE * sizeof(char));
+        memset(msg.user, 0, USER_MAX_SIZE * sizeof(char));
+        msg.time = 0;
+
+        if (fscanf(fptr, " %s ", msg.topic) < 0)
         {
             fclose(fptr);
             printf("Nothing was read from the save file\n");
             return;
         }
-        topic_count = checkTopicExists(temp_topic, pdata->topic_list, pdata->current_topics);
+        topic_count = checkTopicExists(msg.topic, pdata->topic_list, pdata->current_topics);
         if (topic_count == -1)
         {
-            createNewTopic(temp_topic, pdata->topic_list, &pdata->current_topics);
+            topic_count = createNewTopic(msg.topic, pdata->topic_list, &pdata->current_topics);
+            printf("Created new topic [%s] from file\n",
+                   pdata->topic_list[topic_count].topic);
         }
 
+        // printf("Reading user from file\n");
         //! Do NOT remove the last space from the formatter
         // it "removes" the first space from the msg
-        fscanf(fptr, "%s %d ",
-               pdata->topic_list[topic_count]
-                   .persist_msg[msg_count]
-                   .user,
-               &pdata->topic_list[topic_count]
-                    .persist_msg[msg_count]
-                    .time);
-
-        fgets(pdata->topic_list[topic_count]
-                  .persist_msg[msg_count]
-                  .text,
-              MSG_MAX_SIZE, fptr);
-
-        REMOVE_TRAILING_ENTER(pdata->topic_list[topic_count].persist_msg[msg_count].text);
-        pdata->topic_list[topic_count].persistent_msg_count = ++msg_count;
+        fscanf(fptr, " %s", msg.user);
+        // printf("Reading time from file\n");
+        fscanf(fptr, "%d ", &msg.time);
+        // printf("Reading message from file\n");
+        fgets(msg.text, MSG_MAX_SIZE, fptr);
+        addNewPersistentMessage(msg, pdata->topic_list[topic_count].persist_msg,
+                                &pdata->topic_list[topic_count].persistent_msg_count);
+        printf("New message from file\n%s %s %d %s",
+               msg.topic, msg.user, msg.time, msg.text);
     }
-
-    pdata->current_topics = topic_count + 1;
 
     fclose(fptr);
     return;

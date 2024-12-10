@@ -80,51 +80,66 @@ void showPersistantMessagesInTopic(char *topic, void *data)
 {
     TDATA *pdata = (TDATA *)data;
     int index = checkTopicExists(topic, pdata->topic_list, pdata->current_topics);
-    if (index > 0)
+    if (index < 0)
     {
-        for (int j = 0; j < pdata->topic_list[index].persistent_msg_count; j++)
-        {
-            printf("%d: From [%s] with %d time left\n \t%s\n", j,
-                   pdata->topic_list[index].persist_msg[j].user,
-                   pdata->topic_list[index].persist_msg[j].time,
-                   pdata->topic_list[index].persist_msg[j].text);
-        }
+        printf("No topic <%s> was found\n", topic);
+        return;
     }
 
-    printf("No topic <%s> was found\n", topic);
+    for (int j = 0; j < pdata->topic_list[index].persistent_msg_count; j++)
+    {
+        printf("%d: From [%s] with %d time left\n \t%s\n", j,
+               pdata->topic_list[index].persist_msg[j].user,
+               pdata->topic_list[index].persist_msg[j].time,
+               pdata->topic_list[index].persist_msg[j].text);
+    }
     return;
 }
 
-void handleNewMessage(msgData message, int msg_size, void *data)
+int addNewPersistentMessage(msgData message, msgData *message_list, int *message_count)
+{
+    REMOVE_TRAILING_ENTER(message.text);
+    memcpy(&message_list[*message_count], &message, sizeof(msgData));
+    (*message_count)++;
+    return (*message_count) - 1;
+}
+
+void handleNewMessage(msgData message, int msg_size, userData user, void *data)
 {
     TDATA *pdata = (TDATA *)data;
     int topic_index = 1;
     int user_subscribed = 0;
+    char str[MSG_MAX_SIZE];
     //? confirm if the user is logged in
-    if (pthread_mutex_lock(pdata->mutex_topics) != 0)
-        printf("Lock topics before handling message\n");
 
-    for (int i = 0; i < pdata->current_topics; i++)
+    int index_topics = checkTopicExists(message.topic, pdata->topic_list, pdata->current_topics);
+    if (index_topics < 0)
     {
-        if (strcmp(pdata->topic_list[i].topic, message.topic) == 0)
-        {
-            for (int j = 0; j < pdata->topic_list[i].subscribed_user_count; j++)
-            {
-                if (strcmp(pdata->topic_list[i].subscribed_users[j].name, message.user) == 0)
-                {
-                    if (message.time != 0)
-                    {
-                        memcpy(&pdata->topic_list[i].persist_msg[pdata->topic_list[i].persistent_msg_count],
-                               &message, sizeof(msgData));
-                    }
-                    break;
-                }
-            }
-            break;
-        }
+        sprintf(str, "You're not subscribe to the topic %s", message.topic);
+        sendResponse(0, "Info", str, user);
+        return;
     }
 
-    if (pthread_mutex_unlock(pdata->mutex_topics) != 0)
-        printf("Unlock topics before handling message\n");
+    int index_user = checkUserIsInList(user.name, pdata->topic_list[index_topics].subscribed_users,
+                                       &pdata->topic_list[index_topics].subscribed_user_count);
+    if (index < 0)
+    {
+        sprintf(str, "You're not subscribe to the topic %s", message.topic);
+        sendResponse(0, "Info", str, user);
+        return;
+    }
+
+    if (message.time > 0)
+        addNewPersistentMessage(message, pdata->topic_list[index_topics].persist_msg,
+                                &pdata->topic_list[index_topics].persistent_msg_count);
+
+    sendResponse(0, "Info", "Message received by the server", user);
+
+    for (int i = 0; i < pdata->topic_list[index_topics].subscribed_user_count; i++)
+    {
+        if (strcmp(pdata->topic_list[index_topics].subscribed_users[i].name, user.name) != 0)
+            sendResponse(message.time, message.topic, message.text,
+                         pdata->topic_list[index_topics].subscribed_users[i]);
+    }
     return;
 }

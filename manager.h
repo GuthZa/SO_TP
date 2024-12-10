@@ -52,11 +52,6 @@ typedef struct
 /* ===================== RESPONSES AND REQUESTS ======================= */
 
 /**
- * @note does NOT need mutex
- */
-void handleNewMessage(msgData message, int msg_size, void *data);
-
-/**
  * @returns -1 on an error, sent bytes otherwise
  */
 int sendResponse(int time, char *topic, char *text, userData user);
@@ -116,6 +111,19 @@ int createNewTopic(char *topic_name, topic *topic_list, int *topic_count);
  */
 int clearEmptyTopics(topic *topic_list, int *current_topics);
 
+/* ============= HANDLING MESSAGES ================ */
+
+int addNewPersistentMessage();
+
+void showPersistantMessagesInTopic(char *topic, void *data);
+
+int addNewPersistentMessage(msgData message, msgData *message_list, int *message_count);
+
+/**
+ * @note does NOT need mutex
+ */
+void handleNewMessage(msgData message, int msg_size, userData user, void *data);
+
 /* ============= UPDATING MESSAGE TIMERS ================ */
 // Handles updating, remove expired messages and topics
 void *updateMessageCounter(void *data);
@@ -130,9 +138,6 @@ void saveToFile(void *data);
 /* ======================== TO BE REFACTORED ========================== */
 
 void *handleFifoCommunication(void *data);
-
-// Functions to handle admin commands
-void showPersistantMessagesInTopic(char *topic, void *data);
 
 /**
  * @param isToLock 1 lock | 0 unlock
