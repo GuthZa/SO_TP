@@ -13,7 +13,7 @@ void createFifo(char *fifo)
     {
         if (errno == EEXIST)
             printf("[Warning] Named fifo already exists or the program is ope.\n");
-        printf("[Error] Unable to open the named fifo\n");
+        printf("[Error] Unable to open the named fifo, please guarantee that the dirrectory ./fifos exists\n");
         exit(EXIT_FAILURE);
     }
 }

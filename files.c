@@ -14,7 +14,7 @@ void getFromFile(void *data)
     fptr = fopen(file_name, "r");
     if (fptr == NULL)
     {
-        printf("[Warning] Read file - File does not exist, no information read\n");
+        printf("[Warning] Read file - File does not exist, check if [msg.txt] exists\n");
         return;
     }
 
