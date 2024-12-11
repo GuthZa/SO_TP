@@ -110,17 +110,6 @@ typedef struct
 } subscribe;
 
 /**
- * Struct to send the current topic list to the user
- *
- * @note not used to save data
- */
-typedef struct
-{
-    int num_topics;
-    char topic_list[TOPIC_MAX_SIZE][TOPIC_MAX_SIZE];
-} topicList;
-
-/**
  * @param fifo Pointer to the name of the fifo
  *
  * @note Might terminate the program
