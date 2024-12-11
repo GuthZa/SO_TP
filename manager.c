@@ -94,10 +94,22 @@ int main()
             {
                 printf("Current topics:\n");
                 for (int i = 0; i < data.current_topics; i++)
-                    printf("%d: <%s> - %d users subscribed\n",
-                           i + 1,
-                           data.topic_list[i].topic,
-                           data.topic_list[i].subscribed_user_count);
+                {
+                    if (data.topic_list[i].is_topic_locked)
+                    {
+                        printf("%d: <%s> - %d users subscribed, locked\n",
+                               i + 1,
+                               data.topic_list[i].topic,
+                               data.topic_list[i].subscribed_user_count);
+                    }
+                    else
+                    {
+                        printf("%d: <%s> - %d users subscribed, unlockedn",
+                               i + 1,
+                               data.topic_list[i].topic,
+                               data.topic_list[i].subscribed_user_count);
+                    }
+                }
             }
 
             if (pthread_mutex_unlock(data.mutex_topics) != 0)

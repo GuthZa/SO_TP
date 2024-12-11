@@ -70,14 +70,23 @@ void subscribeUser(userData user, char *topic_name, void *data)
         sendResponse(0, "Info", str, aux);
         return;
     }
-
     int i = addUserToList(user, pdata->topic_list[index].subscribed_users,
                           &pdata->topic_list[index].subscribed_user_count);
 
-    printf("New user [%s] subscribed to the topic <%s>\n",
-           pdata->topic_list[index].subscribed_users[i].name,
-           pdata->topic_list[index].topic);
-    sprintf(str, "You have subscribed the topic %s", topic_name);
+    if (pdata->topic_list[index].is_topic_locked)
+    {
+        printf("New user [%s] subscribed to a locked topic <%s>\n",
+               pdata->topic_list[index].subscribed_users[i].name,
+               pdata->topic_list[index].topic);
+        sprintf(str, "You have subscribed to a locked topic %s, you won't be able to send messages", topic_name);
+    }
+    else
+    {
+        printf("New user [%s] subscribed to the topic <%s>\n",
+               pdata->topic_list[index].subscribed_users[i].name,
+               pdata->topic_list[index].topic);
+        sprintf(str, "You have subscribed the topic %s", topic_name);
+    }
     sendResponse(0, "Info", str, aux);
 
     int last_message = pdata->topic_list[index].persistent_msg_count;
@@ -155,20 +164,31 @@ int createNewTopic(char *topic_name, topic *topic_list, int *topic_count)
 void lockUnlockTopic(char *topic, int isToLock, void *data)
 {
     TDATA *pdata = (TDATA *)data;
+    char str[MSG_MAX_SIZE];
     int index = checkTopicExists(topic,
                                  pdata->topic_list,
                                  pdata->current_topics);
-
-    if (index != -1)
+    if (index < 0)
     {
-        pdata->topic_list[index].is_topic_locked = isToLock;
-        if (isToLock)
-            printf("Topic <%s> was locked.\n", topic);
-        else if (!isToLock)
-            printf("Topic <%s> was unlocked.\n", topic);
+
+        printf("No topic <%s> was found.\n", topic);
         return;
     }
-    printf("No topic <%s> was found.\n", topic);
+    pdata->topic_list[index].is_topic_locked = isToLock;
+    if (isToLock)
+    {
+        sprintf(str, "The topic %s has been locked", pdata->topic_list[index].topic);
+        printf("Topic <%s> was locked.\n", topic);
+    }
+    else if (!isToLock)
+    {
+        sprintf(str, "The topic %s has been unlocked", pdata->topic_list[index].topic);
+        printf("Topic <%s> was unlocked.\n", topic);
+    }
+    for (int i = 0; i < pdata->topic_list[index].subscribed_user_count; i++)
+    {
+        sendResponse(0, "Info", str, pdata->topic_list[index].subscribed_users[i]);
+    }
     return;
 }
 
@@ -176,54 +196,28 @@ void writeTopicList(userData user, void *data)
 {
     TDATA *pdata = (TDATA *)data;
     char FEED_FIFO_FINAL[100];
-    char aux[MSG_MAX_SIZE];
+    userData aux = user;
     sprintf(FEED_FIFO_FINAL, FEED_FIFO, user.pid);
 
     int last_topic = pdata->current_topics;
     if (last_topic <= 0)
     {
         printf("User [%s] tried to get the topic list, it's empty\n", user.name);
-        strcpy(user.name, "[Server]");
-        sprintf(aux, "There are no topics.\n Feel free to create one!");
-        sendResponse(0, "Info", aux, user);
+        strcpy(aux.name, "[Server]");
+        sendResponse(0, "Info", "There are no topics.\n Feel free to create one!", user);
         return;
     }
 
-    int fd = open(FEED_FIFO_FINAL, O_WRONLY);
-    if (fd == -1)
+    char topic[TOPIC_MAX_SIZE] = "\0";
+    for (int i = 0; i < pdata->current_topics; i++)
     {
-        printf("[Error] Code %d\n", errno);
-        printf("Unable to open the feed pipe: WriteTopic\n");
-        return;
-    }
-
-    // This might not be the best solution, but it works
-    // Topic will send "Topic List"
-    // User will send if current_topics > 15
-    // Time saves the number of topics
-    char str[MSG_MAX_SIZE] = "";
-    char extra[USER_MAX_SIZE] = "";
-    for (int i = pdata->current_topics; i > 0; i--)
-    {
-        // TOPIC_MAX_SIZE (20) * TOPIC_MAX_SIZE (20) = 400
-        // MSG_MAX_SIZE (300) + USER_MAX_SIZE (100) = 400
-        // topics go from 0, 20
-        // 15 * TOPIC_MAX_SIZE = 300
-        if (i > 15)
-        {
-            // Appends topics
-            sprintf(aux, "%d: %s\n%s", i, pdata->topic_list[i - 1].topic, extra);
-            strcpy(extra, aux);
-        }
+        sprintf(topic, "%d", i);
+        strcpy(aux.name, pdata->topic_list[i].topic);
+        if (pdata->topic_list[i].is_topic_locked)
+            sendResponse(0, topic, "Locked", aux);
         else
-        {
-            // Appends topics
-            sprintf(aux, "%d: %s\n%s", i, pdata->topic_list[i - 1].topic, str);
-            strcpy(str, aux);
-        }
+            sendResponse(0, topic, "Locked", aux);
     }
-    printf("Send list topic to user [%s]\n", user.name);
-    strcpy(user.name, extra);
-    sendResponse(pdata->current_topics, "Topic List", str, user);
-    close(fd);
+    printf("Sent topic list to user [%s]\n", user.name);
+    return;
 }

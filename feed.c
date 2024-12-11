@@ -88,6 +88,8 @@ int main(int argc, char **argv)
 
         if (strcmp(command, "exit") == 0)
         {
+            printf("Warning manager of closing...\n");
+            sendRequest(LOGOUT, &data);
             closeService("Logging off...\n", &data);
         }
         if (strcmp(command, "msg") == 0)
@@ -300,7 +302,6 @@ void sendMessage(msgData message, void *data)
     // Calculate message size
     msg_struct.msg_size = CALCULATE_MSGDATA_SIZE(message.text);
     size = CALCULATE_MSG_SIZE(msg_struct.msg_size);
-    printf("%d\n", size);
     if (write(fd, &msg_struct, size) < 0)
     {
         close(fd);
@@ -319,9 +320,6 @@ void closeService(char *msg, void *data)
     printf("%s\n", msg);
 
     pdata->stop = 1;
-
-    printf("Warning manager of closing...\n");
-    sendRequest(LOGOUT, data);
 
     int i = 0;
     printf("Stopping background processes...\n");

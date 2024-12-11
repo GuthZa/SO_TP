@@ -119,7 +119,7 @@ void handleNewMessage(msgData message, int msg_size, userData user, void *data)
     int topic_index = 1;
     int user_subscribed = 0;
     char str[MSG_MAX_SIZE];
-    //? confirm if the user is logged in
+    //? confirm if the user is logged in/ user_list
 
     int index_topics = checkTopicExists(
         message.topic,
@@ -129,6 +129,14 @@ void handleNewMessage(msgData message, int msg_size, userData user, void *data)
     {
         printf("User [%s] sent a message to a topic that does not exist.\n", user.name);
         sprintf(str, "You're not subscribe to the topic %s", message.topic);
+        sendResponse(0, "Info", str, aux);
+        return;
+    }
+
+    if (pdata->topic_list[index_topics].is_topic_locked)
+    {
+        printf("User [%s] sent a message to a topic that is locked.\n", user.name);
+        sprintf(str, "The topic %s is locked", message.topic);
         sendResponse(0, "Info", str, aux);
         return;
     }
